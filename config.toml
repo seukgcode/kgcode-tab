@@ -1,0 +1,21 @@
+[logger]
+name     = "kgtab"
+log_path = "kgtab.log"
+
+[process]
+spacy_model = "en_core_web_lg"
+db_path     = ".cache/tab.db"
+
+	[process.spellcheck]
+	check_repeat     = 10
+	cooldown         = 10.0
+	chunk_size       = 1000
+	combine_cutoff   = 90
+	correction_limit = 5
+
+	[process.entity]
+	concurrency    = 400
+	chunk_size     = 10000
+	timeout        = 30
+	block_num      = 3
+	ancestor_level = 3

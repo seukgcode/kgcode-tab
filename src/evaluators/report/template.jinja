@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<head>
+	<meta charset="UTF-8">
+	<title>Test Report</title>
+</head>
+
+<body>
+	<!-- <h1>By dataset</h1> -->
+	{% for chart in charts %}
+	{{ chart }}
+	{% endfor %}
+</body>
+
+</html>
