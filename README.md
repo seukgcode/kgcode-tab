@@ -1,30 +1,43 @@
-# Matching Tabular Data to Knowledge Graph Based on Entity Disambiguation with Table Context
+# Matching Tabular Data to Knowledge Graph based on Multi-level Scoring Filters for Table Entity Disambiguation
 
 [TOC]
 
-## Overview
+## Requirements & Install
 
-Tabular data to knowledge graph matching (TDKGM) aims to assign semantic tags from knowledge graphs (KGs) to the elements of the tables, including three tasks: Column Type Annotation (CTA), Cell Entity Annotation (CEA), and Columns Property Annotation (CPA). It is a non-trivial task due to missing, incomplete, or ambiguous metadata, which makes entity disambiguation more difficult.
+Python 3.11 (Typing required)
 
-Previous approaches mostly are based on two representative paradigms: heuristic-based and deep learning-based methods. However, the former is less robust when tackling real-world Web tables, while the latter requires much training data and time.
+We are proud to use `poetry` as our package manager. All of the dependencies are listed in `pyproject.toml`.
 
-Consequently, we conceive the idea of introducing table context semantics and propose a novel annotation method KGCODE-Tab. First, we preprocess the tabular data via table structure analysis, spell correction, and entity recall. Then, we assign scores to the candidate entities of the cells, based on the similarities between table cells and property values in KGs. After that, we determine the subject column and find property-based matches. Finally, we complete three semantic annotation tasks based on scores without the help of non-table information (e.g., table headers and table names).
+We use `mypy`, `ruff`, and `black` formatter. So far this project have not been typing safe though.
 
-Experimental results on public datasets demonstrate that although we do not take any complicated technical route, KGCODE-Tab can disambiguate most entity mentions and significantly outperform most of the baseline methods.
+## Files
 
-## Requirements
+```dir
+|-examples
+|-misc            # Some files to process the results.
+|-src
+| |-analysis      # For disambiguation and annotation, including scoring and property match.
+| |-datasets      # Universal dataset adapters for processing and evaluating.
+| |-evaluators    # Answer tasks with annotation results, perform evaluation and generate HTML report.
+| |-process       # Preprocess and databases. Including classes for spell correction and wikidata search.
+| |-searchmanage  # Multithread searcher implementation.
+| |-table         # ORM classes for representing table and entity.
+| |-utils         # Utilities used in preprocess and disambiguation.
+|-tests           # Files to execute tests and perform experiments.
+|-config.toml     # Configuration of preprocessing, including concurrency, chunk size and timeout.
+```
 
-- Python 3.11 (Typing required)
-- SQLite (Database management)
-- Spacy (optional, for NER)
+By default, cache files (databases) are saved in `./.cache`.  
+Result files are saved in `./.result`, in separated directories named by timestamp.  
+Optional `SentenceTransformers` models are cached in `./.models` by default.
 
 ## Quick Start
 
-Load dataset. You can change `LimayeDataset` to others like `T2DDataset`, `MusicBrainzDataset`, `ImdbDataset`, and `SemTabDataset`. This will automatically create gt.parquet file to accelerate reading.
+At first, you need to load the dataset. You can change `LimayeDataset` to others like `T2DDataset`, `MusicBrainzDataset`, `ImdbDataset`, and `ShortTablesDataset`. This will automatically create `gt.parquet` file to accelerate reading.
 
 ```py
 from src.datasets import LimayeDataset
-ds = LimayeDataset("datasets/Limaye", limit=50)
+ds = LimayeDataset("datasets/Limaye", limit=50) # You can set the limit of tables to use
 ```
 
 Create table processor and load cached processed tables (If no table cache, the file will be created). MessagePack format is preferred for smaller size, but json is also OK.
@@ -45,7 +58,25 @@ Load entity cache to `EntityManager`. This is optional, but it will accelerate e
 EntityManager.load(".cache/limaye-entities.msgpack")
 ```
 
-Create answerer, and annotate all tables loaded to the table processor.
+Then preprocess the tables.
+
+```py
+tp.process(
+    BingRequester(),
+    WDSearch(concurrency=50),
+    skip_query=False,  # Use this to  if you are are that all entities are stored locally and no more KG query is needed
+    force_correct=True,
+    force_retrieve=True,
+    retrieval_filters=[
+        F.score_by_ratio(fuzz.ratio),
+        F.order_by(key=lambda c: -c.score / (1 + c.rank)**0.25),
+        F.limiter(15)
+    ], # Use filers to preliminarily screen out candidates
+    final_filters=[],
+)
+```
+
+Create answerer, and annotate all tables loaded to the table processor. Before this, you can assign parameters.
 
 ```py
 ans = Answerer(ds)
@@ -81,22 +112,4 @@ if __name__ == "__main__":
         main()
 ```
 
-## Folder Structure
-
-```dir
-|-src
-| |-analysis      // For disambiguation and annotation, including scoring and property match.
-| |-datasets      // Universal dataset adapters for processing and evaluating.
-| |-evaluators    // Answer tasks with annotation results, perform evaluation and generate HTML report.
-| |-process       // Preprocess and databases. Including classes for spell correction and wikidata search.
-| |-searchmanage  // Multithread searcher implementation.
-| |-table         // ORM classes for representing table and entity.
-| |-utils         // Utilities used in preprocess and disambiguation.
-|-tests           // Code for test.
-```
-
-## Supplemental Material Statement
-
-Source code and constructed datasets are available in the supplemental material and will be released on GitHub.
-
-## License
+You can also refer to codes in `example` and `tests`.

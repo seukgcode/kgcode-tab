@@ -47,7 +47,8 @@ class EntitiesSearch(object):
         the number of thread in querying. Default: 10
 
     """
-    def __init__(self, key: str = 'search', m_num: int = 10, paramFormat: Union[str, dict] = None, name: str = ""):
+
+    def __init__(self, key: str = "search", m_num: int = 10, paramFormat: Union[str, dict] = None, name: str = ""):
         self.entities_num = 0
         self.key = key
         self.keys = None
@@ -133,7 +134,7 @@ class EntitiesSearch(object):
         keys: Union[str, List[str]] = None,
         timeout: float = 5,
         function_=None,
-        args: tuple = None
+        args: tuple = None,
     ):
         """It solves a single entities in querying which will be call
         in `multithread_get_`.
@@ -169,7 +170,7 @@ class EntitiesSearch(object):
 
     def __queue_to_list_sort__(self):
         """Sort the correct location according to entities.index_
-         after multithreading and then put entities from queue to list."""
+        after multithreading and then put entities from queue to list."""
         if len(self.re_list) != 0:
             self.re_list.clear()
         index_ = []
@@ -189,7 +190,7 @@ class EntitiesSearch(object):
         keys: Union[str, List[str]] = None,
         timeout: float = 30,
         function_=None,
-        args: tuple = None
+        args: tuple = None,
     ):
         """Run method: `__function__` using multithread.
 
@@ -237,9 +238,9 @@ class EntitiesSearch(object):
                 break
 
             end_t = time.time()
-            logger.info('Time elapsed: %.3fs.', end_t - start)
-            logger.info('Too many requests in short time. Waiting %ds for next search.', time_stop)
-            logger.info('Remained search failed Entities: %d.', cache_.qsize())
+            logger.info("Time elapsed: %.3fs.", end_t - start)
+            logger.info("Too many requests in short time. Waiting %ds for next search.", time_stop)
+            logger.info("Remained search failed Entities: %d.", cache_.qsize())
 
             self.search_queue = cache_
             block_num_ += 1
@@ -270,7 +271,7 @@ class EntitiesSearch(object):
 
     @property
     def param_list_1d(self) -> list:
-        """Get a 1D list of entities' parameters in querying. """
+        """Get a 1D list of entities' parameters in querying."""
         return [entities.get_params for entities in self.re_list]
 
     @property

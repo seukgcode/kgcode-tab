@@ -3,50 +3,58 @@ from typing import List, Union
 from warnings import warn
 
 import lxml.etree
-from bs4 import BeautifulSoup
 from requests import Response
 
 from .. import logger
 
 DATA_TYPE = {
-    'commonsMedia': 'string',
-    'globe-coordinate': 'globecoordinate',
-    'wikibase-item': 'wikibase-entityid',
-    'wikibase-property': 'wikibase-entityid',
-    'string': 'string',
-    'monolingualtext': 'monolingualtext',
-    'external-id': 'string',
-    'quantity': 'quantity',
-    'time': 'time',
-    'url': 'string',
-    'math': 'string',
-    'geo-shape': 'string',
-    'musical-notation': 'string',
-    'tabular-data': 'string',
-    'wikibase-lexeme': 'wikibase-entityid',
-    'wikibase-form': 'wikibase-entityid',
-    'wikibase-sense': 'wikibase-entityid'
+    "commonsMedia": "string",
+    "globe-coordinate": "globecoordinate",
+    "wikibase-item": "wikibase-entityid",
+    "wikibase-property": "wikibase-entityid",
+    "string": "string",
+    "monolingualtext": "monolingualtext",
+    "external-id": "string",
+    "quantity": "quantity",
+    "time": "time",
+    "url": "string",
+    "math": "string",
+    "geo-shape": "string",
+    "musical-notation": "string",
+    "tabular-data": "string",
+    "wikibase-lexeme": "wikibase-entityid",
+    "wikibase-form": "wikibase-entityid",
+    "wikibase-sense": "wikibase-entityid",
 }
 """Wikidata Data-type"""
 
 VALUE_TYPE = {
-    'wikibase-entityid': [1, 'id', 'entity-type', 'numeric-id'],
-    'globecoordinate': [2, 'latitude', 'longitude', 'precision', 'globe'],
-    'time': [1, 'time', 'precision', 'before', 'after', 'timezone'],
-    'string': None,
-    'monolingualtext': [2, 'text', 'language'],
-    'quantity': [1, 'amount', 'lowerBound', 'upperBound']
+    "wikibase-entityid": [1, "id", "entity-type", "numeric-id"],
+    "globecoordinate": [2, "latitude", "longitude", "precision", "globe"],
+    "time": [1, "time", "precision", "before", "after", "timezone"],
+    "string": None,
+    "monolingualtext": [2, "text", "language"],
+    "quantity": [1, "amount", "lowerBound", "upperBound"],
 }
 """Wikidata Value-type"""
 
 REG = re.compile("/")
 """Regular expression"""
 
-PATTEN1 = ['labels', 'descriptions', 'aliases']
+PATTEN1 = ["labels", "descriptions", "aliases"]
 """Analysis keys in patten1"""
 
-DBPEDIA_KEYS = [(1, 'label'), (1, 'resource'), (2, 'typeName'), (2, 'type'), (1, 'score'),
-                (1, 'refCount'), (1, 'comment'), (2, 'redirectlabel'), (2, 'category')]
+DBPEDIA_KEYS = [
+    (1, "label"),
+    (1, "resource"),
+    (2, "typeName"),
+    (2, "type"),
+    (1, "score"),
+    (1, "refCount"),
+    (1, "comment"),
+    (2, "redirectlabel"),
+    (2, "category"),
+]
 """Analysis keys-1 using in Dbpedia look up json data."""
 
 
@@ -75,38 +83,38 @@ class AnalysisTools:
         match_ = []
 
         try:
-            if json_['success'] == 1:
-                for da_ in json_['search']:
+            if json_["success"] == 1:
+                for da_ in json_["search"]:
                     try:
-                        id_.append(da_['id'])
+                        id_.append(da_["id"])
                     except KeyError:
                         id_.append(None)
                     try:
-                        url_.append(da_['url'])
+                        url_.append(da_["url"])
                     except KeyError:
                         url_.append(None)
                     try:
-                        label_.append(da_['label'])
+                        label_.append(da_["label"])
                     except KeyError:
                         label_.append(None)
                     try:
-                        describe_.append(da_['description'])
+                        describe_.append(da_["description"])
                     except KeyError:
                         describe_.append(None)
                     try:
-                        match_.append(da_['match']['type'])
+                        match_.append(da_["match"]["type"])
                     except KeyError:
                         match_.append(None)
         except KeyError:
             pass
 
-        re_dict = {'id': id_, 'url': url_, 'label': label_, 'description': describe_, 'match': match_}
-        if keys == 'all' or type(keys) == list:
+        re_dict = {"id": id_, "url": url_, "label": label_, "description": describe_, "match": match_}
+        if keys == "all" or type(keys) == list:
             return re_dict
         try:
             return {keys: re_dict[keys]}
         except KeyError:
-            logger.error(f'No keys: {keys}')
+            logger.error(f"No keys: {keys}")
             return re_dict
 
     @staticmethod
@@ -122,126 +130,126 @@ class AnalysisTools:
         re_ = []
         for key in keys:
             re_dict = {
-                'key': key,
-                'correct': 1,
-                'root': None,
-                'identity': None,
-                'patten': None,
-                'error': None
+                "key": key,
+                "correct": 1,
+                "root": None,
+                "identity": None,
+                "patten": None,
+                "error": None,
             }
             kl = REG.split(key)
             # labels,description,aliases
             if kl[0] in PATTEN1:
-                re_dict['root'] = kl[0]
+                re_dict["root"] = kl[0]
                 if len(kl) == 1:
-                    re_dict['patten'] = 0
+                    re_dict["patten"] = 0
                 elif len(kl) == 2:
-                    if kl[1] == '':
-                        re_dict['patten'] = 0
+                    if kl[1] == "":
+                        re_dict["patten"] = 0
                     else:
-                        re_dict['patten'] = 1
-                        re_dict['identity'] = kl[1]
+                        re_dict["patten"] = 1
+                        re_dict["identity"] = kl[1]
                 elif len(kl) == 3:
-                    if kl[1] == '' and kl[2] == '':
-                        re_dict['patten'] = 0
+                    if kl[1] == "" and kl[2] == "":
+                        re_dict["patten"] = 0
                     else:
-                        re_dict['error'] = 'format'
-                        re_dict['correct'] = 0
+                        re_dict["error"] = "format"
+                        re_dict["correct"] = 0
                 else:
-                    re_dict['error'] = 'tooLong'
-                    re_dict['correct'] = 0
+                    re_dict["error"] = "tooLong"
+                    re_dict["correct"] = 0
 
             # claims
-            elif kl[0] == 'claims':
-                re_dict['root'] = kl[0]
+            elif kl[0] == "claims":
+                re_dict["root"] = kl[0]
                 if len(kl) == 1:
-                    re_dict['patten'] = 0
+                    re_dict["patten"] = 0
                 elif len(kl) == 2:
-                    if kl[1] == '':
-                        re_dict['patten'] = 0
-                    elif (kl[1].lower())[0] == 'p':
-                        re_dict['patten'] = 0
-                        re_dict['identity'] = kl[1]
+                    if kl[1] == "":
+                        re_dict["patten"] = 0
+                    elif (kl[1].lower())[0] == "p":
+                        re_dict["patten"] = 0
+                        re_dict["identity"] = kl[1]
                     else:
-                        re_dict['error'] = 'format'
-                        re_dict['correct'] = 0
+                        re_dict["error"] = "format"
+                        re_dict["correct"] = 0
                 elif len(kl) == 3:
-                    if kl[1] == '' and kl[2] == '':
-                        re_dict['patten'] = 0
-                    elif (kl[1].lower())[0] == 'p':
-                        re_dict['identity'] = kl[1]
-                        if kl[2] == '':
-                            re_dict['patten'] = 0
-                        elif kl[2] == 'value':
-                            re_dict['patten'] = 1
-                        elif kl[2] == 'qualifiers-order':
-                            re_dict['patten'] = 2
-                        elif kl[2] == 'qualifiers':
-                            re_dict['patten'] = 3
-                        elif kl[2] == 'references':
-                            re_dict['patten'] = 4
+                    if kl[1] == "" and kl[2] == "":
+                        re_dict["patten"] = 0
+                    elif (kl[1].lower())[0] == "p":
+                        re_dict["identity"] = kl[1]
+                        if kl[2] == "":
+                            re_dict["patten"] = 0
+                        elif kl[2] == "value":
+                            re_dict["patten"] = 1
+                        elif kl[2] == "qualifiers-order":
+                            re_dict["patten"] = 2
+                        elif kl[2] == "qualifiers":
+                            re_dict["patten"] = 3
+                        elif kl[2] == "references":
+                            re_dict["patten"] = 4
                         else:
-                            re_dict['error'] = 'format'
-                            re_dict['correct'] = 0
+                            re_dict["error"] = "format"
+                            re_dict["correct"] = 0
                     else:
-                        re_dict['error'] = 'format'
-                        re_dict['correct'] = 0
+                        re_dict["error"] = "format"
+                        re_dict["correct"] = 0
                 elif len(kl) == 4:
-                    if (kl[1].lower())[0] == 'p':
-                        re_dict['identity'] = kl[1]
-                        if kl[2] == '' and kl[3] == '':
-                            re_dict['patten'] = 0
-                        elif kl[2] == 'qualifiers' and kl[3] == '':
-                            re_dict['patten'] = 3
-                        elif kl[2] == 'references' and kl[3] == '':
-                            re_dict['patten'] = 4
+                    if (kl[1].lower())[0] == "p":
+                        re_dict["identity"] = kl[1]
+                        if kl[2] == "" and kl[3] == "":
+                            re_dict["patten"] = 0
+                        elif kl[2] == "qualifiers" and kl[3] == "":
+                            re_dict["patten"] = 3
+                        elif kl[2] == "references" and kl[3] == "":
+                            re_dict["patten"] = 4
                         else:
-                            re_dict['error'] = 'format'
-                            re_dict['correct'] = 0
+                            re_dict["error"] = "format"
+                            re_dict["correct"] = 0
                     else:
-                        re_dict['error'] = 'format'
-                        re_dict['correct'] = 0
+                        re_dict["error"] = "format"
+                        re_dict["correct"] = 0
                 elif len(kl) == 5:
-                    if (kl[1].lower())[0] == 'p':
-                        re_dict['identity'] = kl[1]
+                    if (kl[1].lower())[0] == "p":
+                        re_dict["identity"] = kl[1]
 
-                        if kl[2] == 'qualifiers' and kl[3] == '' and kl[4] == '':
-                            re_dict['patten'] = 3
-                        elif kl[2] == 'references' and kl[3] == '' and kl[4] == '':
-                            re_dict['patten'] = 4
+                        if kl[2] == "qualifiers" and kl[3] == "" and kl[4] == "":
+                            re_dict["patten"] = 3
+                        elif kl[2] == "references" and kl[3] == "" and kl[4] == "":
+                            re_dict["patten"] = 4
                         else:
-                            re_dict['error'] = 'format'
-                            re_dict['correct'] = 0
+                            re_dict["error"] = "format"
+                            re_dict["correct"] = 0
                     else:
-                        re_dict['error'] = 'format'
-                        re_dict['correct'] = 0
+                        re_dict["error"] = "format"
+                        re_dict["correct"] = 0
                 else:
-                    re_dict['error'] = 'tooLong'
-                    re_dict['correct'] = 0
+                    re_dict["error"] = "tooLong"
+                    re_dict["correct"] = 0
 
             # sitelinks
-            elif kl[0] == 'sitelinks':
-                re_dict['root'] = kl[0]
+            elif kl[0] == "sitelinks":
+                re_dict["root"] = kl[0]
                 if len(kl) == 1:
-                    re_dict['patten'] = 0
+                    re_dict["patten"] = 0
                 elif len(kl) == 2:
-                    if kl[1] == '':
-                        re_dict['patten'] = 0
+                    if kl[1] == "":
+                        re_dict["patten"] = 0
                     else:
-                        re_dict['error'] = 'format'
-                        re_dict['correct'] = 0
+                        re_dict["error"] = "format"
+                        re_dict["correct"] = 0
                 elif len(kl) == 3:
-                    if kl[1] == '' and kl[2] == '':
-                        re_dict['patten'] = 0
+                    if kl[1] == "" and kl[2] == "":
+                        re_dict["patten"] = 0
                     else:
-                        re_dict['error'] = 'format'
-                        re_dict['correct'] = 0
+                        re_dict["error"] = "format"
+                        re_dict["correct"] = 0
                 else:
-                    re_dict['error'] = 'tooLong'
-                    re_dict['correct'] = 0
+                    re_dict["error"] = "tooLong"
+                    re_dict["correct"] = 0
             else:
-                re_dict['error'] = 'root'
-                re_dict['correct'] = 0
+                re_dict["error"] = "root"
+                re_dict["correct"] = 0
             re_.append(re_dict)
         return re_
 
@@ -257,28 +265,28 @@ class AnalysisTools:
         """
         try:
             # da = da_['mainsnak']
-            da_t = da_['datatype']
+            da_t = da_["datatype"]
             va_t = DATA_TYPE[da_t]
             value_l = VALUE_TYPE[va_t]
         except KeyError:
             return tuple([None, None])
-        if va_t == 'string':
+        if va_t == "string":
             try:
-                return tuple([va_t, da_['datavalue']['value']])
+                return tuple([va_t, da_["datavalue"]["value"]])
             except KeyError:
                 return tuple([va_t, None])
         else:
             num = value_l[0]
             if num == 1:
                 try:
-                    return tuple([va_t, da_['datavalue']['value'][value_l[1]]])
+                    return tuple([va_t, da_["datavalue"]["value"][value_l[1]]])
                 except KeyError:
                     return tuple([va_t, None])
             else:
                 tuple_l = [va_t]
                 for i in range(num):
                     try:
-                        tuple_l.append(da_['datavalue']['value'][value_l[i + 1]])
+                        tuple_l.append(da_["datavalue"]["value"][value_l[i + 1]])
                     except KeyError:
                         tuple_l.append(None)
                 tuple_ = tuple(tuple_l)
@@ -295,30 +303,30 @@ class AnalysisTools:
         See also:
             - entities_analysis: analysis function used when key = 'ids' in SearchManage.
         """
-        if key['patten'] == 0:
+        if key["patten"] == 0:
             try:
-                return json_[key['root']]
+                return json_[key["root"]]
             except KeyError:
                 return {}
         else:
             try:
-                da_ = json_[key['root']][key['identity']]
+                da_ = json_[key["root"]][key["identity"]]
             except KeyError:
-                if key['root'] == 'aliases':
+                if key["root"] == "aliases":
                     return []
                 else:
                     return None
-            if key['root'] == 'aliases':
+            if key["root"] == "aliases":
                 re_ = []
                 for da in da_:
                     try:
-                        re_.append(da['value'])
+                        re_.append(da["value"])
                     except KeyError:
                         pass
                 return re_
             else:
                 try:
-                    return da_['value']
+                    return da_["value"]
                 except KeyError:
                     return None
 
@@ -333,30 +341,30 @@ class AnalysisTools:
         See also:
             - entities_analysis: analysis function used when key = 'ids' in SearchManage.
         """
-        if key['patten'] == 0:
-            if key['identity'] is None:
+        if key["patten"] == 0:
+            if key["identity"] is None:
                 try:
-                    return json_['claims']
+                    return json_["claims"]
                 except KeyError:
                     return {}
-            elif key['identity'].lower() == 'p':
+            elif key["identity"].lower() == "p":
                 re_ = []
                 try:
-                    for k_, v_ in json_['claims'].items():
+                    for k_, v_ in json_["claims"].items():
                         re_.append(k_)
                 except KeyError:
                     pass
                 return re_
             else:
                 try:
-                    return json_['claims'][key['identity']]
+                    return json_["claims"][key["identity"]]
                 except KeyError:
                     return []
 
-        elif key['patten'] == 1:
-            if key['identity'].lower() == 'p':
+        elif key["patten"] == 1:
+            if key["identity"].lower() == "p":
                 try:
-                    da__: dict = json_['claims']
+                    da__: dict = json_["claims"]
                 except KeyError:
                     return {}
                 re_ = dict()
@@ -364,7 +372,7 @@ class AnalysisTools:
                     re_[k_] = []
                     for v_ in v__:
                         try:
-                            v = v_['mainsnak']
+                            v = v_["mainsnak"]
                             re__ = AnalysisTools.value_analysis(v)
                             if re__[1] is not None:
                                 re_[k_].append(re__)
@@ -374,13 +382,13 @@ class AnalysisTools:
                 return re_
             else:
                 try:
-                    da_ = json_['claims'][key['identity']]
+                    da_ = json_["claims"][key["identity"]]
                 except KeyError:
                     return []
                 re_ = []
                 for da in da_:
                     try:
-                        d = da['mainsnak']
+                        d = da["mainsnak"]
                         re__ = AnalysisTools.value_analysis(d)
                         if re__[1] is not None:
                             re_.append(re__)
@@ -388,34 +396,34 @@ class AnalysisTools:
                         pass
                 return re_
 
-        elif key['patten'] == 2:
+        elif key["patten"] == 2:
             re_ = []
             try:
-                for da_ in json_[key['root']][key['identity']]:
+                for da_ in json_[key["root"]][key["identity"]]:
                     try:
-                        re_.append(da_['qualifiers-order'])
+                        re_.append(da_["qualifiers-order"])
                     except KeyError:
                         re_.append([])
             except KeyError:
                 pass
             return re_
-        elif key['patten'] == 3:
+        elif key["patten"] == 3:
             re_ = []
             try:
-                for da_ in json_[key['root']][key['identity']]:
+                for da_ in json_[key["root"]][key["identity"]]:
                     try:
-                        re_.append(da_['qualifiers'])
+                        re_.append(da_["qualifiers"])
                     except KeyError:
                         re_.append({})
             except KeyError:
                 pass
             return re_
-        elif key['patten'] == 4:
+        elif key["patten"] == 4:
             re_ = []
             try:
-                for da_ in json_[key['root']][key['identity']]:
+                for da_ in json_[key["root"]][key["identity"]]:
                     try:
-                        re_.append(da_['references'])
+                        re_.append(da_["references"])
                     except KeyError:
                         re_.append({})
             except KeyError:
@@ -438,7 +446,7 @@ class AnalysisTools:
         except ValueError:
             raise ValueError("Json data error.")
         try:
-            return json_[key['root']]
+            return json_[key["root"]]
         except KeyError:
             return {}
 
@@ -465,22 +473,22 @@ class AnalysisTools:
         keys_dict = AnalysisTools.keys_regular(keys)
         re_list = []
         try:
-            if json_['success'] == 1:
-                for key_, value_ in json_['entities'].items():
+            if json_["success"] == 1:
+                for key_, value_ in json_["entities"].items():
                     re_dict = dict()
 
                     for k in keys_dict:
-                        re_dict[k['key']] = None
-                        if k['key'] == "properties":
-                            re_dict[k['key']] = AnalysisTools.wiki_property_analysis(value_)
+                        re_dict[k["key"]] = None
+                        if k["key"] == "properties":
+                            re_dict[k["key"]] = AnalysisTools.wiki_property_analysis(value_)
                         else:
-                            if k['correct'] == 1:
-                                if k['root'] in PATTEN1:
-                                    re_dict[k['key']] = AnalysisTools.patten1_analysis(value_, k)
-                                elif k['root'] == 'claims':
-                                    re_dict[k['key']] = AnalysisTools.claims_analysis(value_, k)
-                                elif k['root'] == 'sitelinks':
-                                    re_dict[k['key']] = AnalysisTools.sitelinks_analysis(value_, k)
+                            if k["correct"] == 1:
+                                if k["root"] in PATTEN1:
+                                    re_dict[k["key"]] = AnalysisTools.patten1_analysis(value_, k)
+                                elif k["root"] == "claims":
+                                    re_dict[k["key"]] = AnalysisTools.claims_analysis(value_, k)
+                                elif k["root"] == "sitelinks":
+                                    re_dict[k["key"]] = AnalysisTools.sitelinks_analysis(value_, k)
 
                     re_list.append(re_dict)
         except KeyError:
@@ -496,7 +504,7 @@ class AnalysisTools:
         :return: result of analysis which format is dict
         """
         try:
-            keys: list = json_['head']['vars']
+            keys: list = json_["head"]["vars"]
         except KeyError:
             warn("Analysis filed. Please check Sparql command.")
             return {}
@@ -506,11 +514,11 @@ class AnalysisTools:
             re_an[k_] = []
 
         try:
-            da_l: list = json_['results']['bindings']
+            da_l: list = json_["results"]["bindings"]
             for da_ in da_l:
                 for k_ in keys:
                     try:
-                        re_an[k_].append(da_[k_]['value'])
+                        re_an[k_].append(da_[k_]["value"])
                     except KeyError:
                         re_an[k_].append(da_[k_])
         except KeyError:
@@ -529,16 +537,13 @@ class AnalysisTools:
         return REG_BING_SEARCH.findall(result)
 
     @staticmethod
-    def spell_check_bing(request: Response):
-        result = request.text
-        res = None
+    def spell_check_bing(resp: Response):
         try:
-            soup = BeautifulSoup(result, 'lxml')
-            if soup.find('div', id='sp_requery'):
-                res = soup.find('div', id='sp_requery').a.text
-        except Exception:
-            pass
-        return res
+            s = resp.html.find("#sp_requery a", first=True).text  # 这个挂了
+            # return [el.text.removesuffix(" - Wikidata") for el in resp.html.find("h2 a") if el.text.endswith(" - Wikidata" )]
+            return s
+        except Exception as e:
+            return None
 
     @staticmethod
     def dbpedia_analysis(request_: Response) -> dict:
@@ -550,7 +555,7 @@ class AnalysisTools:
         for da in DBPEDIA_KEYS:
             res[da[1]] = []
         try:
-            docs_ = json_['docs']
+            docs_ = json_["docs"]
             for element in docs_:
                 for da in DBPEDIA_KEYS:
                     if da[0] == 1:
@@ -580,12 +585,13 @@ class AnalysisTools:
         return res
 
     @staticmethod
-    def bing_page(request_: Response):
+    def bing_page(resp: Response):
         res = []
         # print(request_.text)
         try:
-            xpath_data = lxml.etree.HTML(request_.text)
-            res_ = xpath_data.xpath("/html/body/div[1]/main/ol//h2//text()")
+            res_ = [
+                el.text.removesuffix(" - Wikidata") for el in resp.html.find("h2 a") if el.text.endswith(" - Wikidata")
+            ]
             if type(res_) != list:
                 if type(res_) == str:
                     res = [res_]
@@ -611,7 +617,7 @@ class AnalysisTools:
     @staticmethod
     def wiki_property_analysis(value_: dict):
         try:
-            da__: dict = value_['claims']
+            da__: dict = value_["claims"]
         except KeyError:
             return {}
         re_ = dict()
@@ -619,8 +625,8 @@ class AnalysisTools:
             re_[k_] = []
             for v_ in v__:
                 try:
-                    if v_['type'] == 'statement':
-                        v = v_['mainsnak']
+                    if v_["type"] == "statement":
+                        v = v_["mainsnak"]
                         re__ = AnalysisTools.value_analysis(v)
                         if re__[1] is not None:
                             re_[k_].append(re__)

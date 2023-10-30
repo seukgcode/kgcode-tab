@@ -15,7 +15,7 @@ AnnotationTask: TypeAlias = Literal["cta", "cea", "cpa"]
 class TaskDesc:
     task: AnnotationTask
     location: tuple[int, int, int, int]  # 表、列、行、答案位置
-    offset: tuple[int, int]
+    offset: tuple[int, int]  # 列和行的偏移量
     gt: pl.DataFrame
     target: pl.DataFrame
 
@@ -51,4 +51,6 @@ from .imdb import ImdbDataset
 from .limaye import LimayeDataset
 from .musicbrainz import MusicBrainzDataset
 from .semtab import SemTabDataset
+from .st import ShortTablesDataset
 from .t2d import T2DDataset
+from .tt import ToughTablesDataset

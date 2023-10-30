@@ -45,10 +45,12 @@ URL_WIKI = "https://www.wikidata.org/w/api.php"
 def get_bing_url():
     import requests
     try:
-        url = requests.get("https://www.bing.com/").url
+        url = requests.get("https://www.bing.com/", timeout=5).url
     except:
-        raise Exception("Unable to access bing!")
-    return "https://cn.bing.com/?FORM=BEHPTB&ensearch=1" if "cn.bing" in url else url
+        # raise Exception("Unable to access bing!")
+        logger.error("Unable to access bing!")
+        url = ""
+    return "https://cn.bing.com/search?qs=ds&FORM=BESBTB&ensearch=1" if "cn.bing" in url else url
 
 
 URL_BING = get_bing_url()
@@ -77,7 +79,8 @@ AGENT_SPARQL_WIKI = "WDQS-example Python/%s.%s" % (sys.version_info[0], sys.vers
 """Agent in SPARQL."""
 
 PARAM_BING_SPELL_CHECK = {
-    "q": None
+    "q": "%s site:wikidata.org",
+    "setlang": "en-us"
 }
 """Parameter format in Bing Spell Check."""
 
@@ -478,6 +481,63 @@ class Wikipedia(EntitiesSearch):
         return self.request_list
 
 
+class WikipediaNew(EntitiesSearch):
+    def __init__(self, m_num=10):
+        super().__init__(key='wikipedia', m_num=m_num, paramFormat="%s")
+
+    def __function__(
+        self,
+        cache_: Queue,
+        url: str = None,
+        keys: Union[str, List[str]] = None,
+        timeout: float = 5,
+        function_=None,
+        args: tuple = None
+    ):
+        while not self.search_queue.empty():
+            entities = self.search_queue.get()
+            try:
+                if not entities.get_params:
+                    entities.set_request(None)
+                elif function_ is None:
+                    res = wikipedia.search(entities.get_params, results=1, suggestion=True)
+                    entities.set_request((res[0][0] if res[0] else None, res[1]))
+                else:
+                    entities.set_request(function_(entities.get_params, *args))
+                self.re_queue.put(entities)
+            except Exception as e:
+                logger.error(e)
+                cache_.put(entities)
+        self.search_queue.task_done()
+
+    def search_run(
+        self,
+        points: list,
+        time_stop: float = 30.0,
+        block_num: int = 10,
+        function_=None,
+        args: tuple = (),
+        **kwargs
+    ) -> list:
+        self.init_queue(points, **kwargs)
+        logger.info(f"Entities: {self.entities_num} (type: wikipedia). Threading number: {self.m_num}.")
+
+        try:
+            self.multithread_get_(
+                timeout=30.0,
+                time_stop=time_stop,
+                block_num=block_num,
+                url=None,
+                keys=None,
+                function_=function_,
+                args=args
+            )
+        except RuntimeError:
+            logger.warning("Runtime error.")
+            return []
+
+        return self.request_list
+
 class SparqlQuery(EntitiesSearch):
     """Class of querying with Sparql using multithread.
 
@@ -803,7 +863,7 @@ class DbpediaLookUp(EntitiesSearch):
             function_ = AnalysisTools.dbpedia_analysis
         self.name = f"DBpediaLookup&{patten}"
         self.log_info()
-    
+
         try:
             self.multithread_get_(timeout=timeout, time_stop=time_stop, block_num=block_num,
                                   url=url_, keys=None, function_=function_, args=args)

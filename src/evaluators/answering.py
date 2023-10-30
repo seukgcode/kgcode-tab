@@ -6,11 +6,11 @@ from typing import Any, Callable
 import polars as pl
 
 from ..analysis import AnnotationResult
-from ..datasets import TableDataset, TaskDesc, AnnotationTask
+from ..datasets import AnnotationTask, TableDataset, TaskDesc
 from ..evaluators import SemTabEvaluator
 from ..utils import PathLike, logger, write_json
 from ..utils.mylog import colored
-
+from .report import reporter
 
 @dataclass
 class AnswerSheet:
@@ -40,7 +40,7 @@ class Answerer:
 
         ans_sheet = desc.target.unique(maintain_order=True)
         for row in ans_sheet.iter_rows():
-            tid = row[at]
+            tid = str(row[at])
             answers.append(list(row))
             answers[-1][aa] = None
             if tid not in annotations:
@@ -50,7 +50,7 @@ class Answerer:
                 ans = ans_getter(annotations[tid], row[ac] + desc.offset[0], row[ar] + desc.offset[1])
                 answers[-1][aa] = ans or (None if drop_nil else "NIL")
             except IndexError:
-                logger.error("Index Error: %s", row)
+                logger.error(f"Index Error: {row}. The location is {desc.location}, offset is {desc.offset}.")
 
         if not answers:
             logger.warning("No answer provided! Please check your configuration.")
@@ -83,6 +83,7 @@ class Answerer:
 
         res: dict[str, Any] = {"missing": list(nils)}
 
+        evaluator.scope = set(annotations.keys())
         eval_res = evaluator.evaluate(out_path)
         logger.info(colored(eval_res, fg=5, bright=True, flash=True))
         res |= eval_res.to_dict()
@@ -96,27 +97,37 @@ class Answerer:
         dst_path: PathLike,
         evaluators: list[SemTabEvaluator],
         *,
+        dataset_name: str | None = None,
         drop_nil: bool = True,
         metadata: Any = None
-    )  -> dict[str, Any]:
+    ) -> dict[str, Any]:
         now = datetime.datetime.now()
         dst_path = Path(dst_path).absolute() / "history" / now.strftime("%Y%m%d %H%M%S")
         dst_path.mkdir(parents=True)
 
         logger.info("Start answering and evaluating...")
+        dataset_name = dataset_name or self.dataset.__class__.__name__.removesuffix("Dataset")
         report: dict[str, Any] = {
-            "datetime": str(now), "dataset": self.dataset.__class__.__name__.removesuffix("Dataset"), "parameters":
-            results[1], "metadata": metadata,
+            "datetime": str(now), "dataset": dataset_name, "parameters": results[1], "metadata": metadata,
             **{ev.task.upper(): self._answer_impl(results[0], dst_path, ev, drop_nil=drop_nil)
                for ev in evaluators}
         }
         write_json(report, dst_path / "report.json", indent=2)
 
+        write_json({k: v.cea_score for k, v in results[0].items()}, dst_path / "cea_score.json")
+
+        write_json({k: v.cea_ranking for k, v in results[0].items()}, dst_path / "cea_ranking.json")
+
+        perf = pl.DataFrame([[k, *v.shape, v.duration / 1e9] for k, v in results[0].items()],
+                            schema=["table", "rows", "cols", "duration"])
+        perf.write_csv(dst_path / "perf.csv")
+        reporter.generate_perf_figure(dst_path, perf)
+
         try:
             latest = dst_path.parents[1] / "latest"
             latest.unlink(True)
             latest.symlink_to(dst_path, True)
-        except:
+        except Exception:
             ...
 
         logger.info("Evaluation completed.")

@@ -6,7 +6,7 @@ import orjson as json
 from sqlite_utils import Database
 from sqlite_utils.db import Table
 
-from ..utils import PathLike, logger, config
+from ..utils import PathLike, config, logger
 
 logger.info("Load db: %s", config["process"]["db_path"])
 
@@ -45,6 +45,7 @@ _db_wikidata_entity = _get_table(
 def _update():
     if _ensure_column(_db_correction, "similarity", float, 1.0):
         from rapidfuzz import fuzz
+
         items = ({**t, "similarity": fuzz.partial_ratio(t["key"], t["value"])} for t in _db_correction.rows)
         _db_correction.upsert_all(items, pk=["key", "value"])  # type: ignore
 
@@ -96,15 +97,24 @@ def remove_keys_in_table(table: str, key: str, given: Iterable[str], additional:
     db[table].delete_where(where_condition)  # type: ignore
 
 
+def remove_correction_keys(given: Iterable[str]):
+    remove_keys_in_table("correction", "key", given)
+
+
 def get_correction_keys(given: Iterable[str]) -> set[str]:
-    return set(given) - get_keys_in_table("correction", "key",
-                                          given) - get_keys_in_table("correction_failure", "key", given)
+    return (
+        set(given)
+        - get_keys_in_table("correction", "key", given)
+        - get_keys_in_table("correction_failure", "key", given)
+    )
 
 
 def add_correction(key: str, values: Iterable[str]) -> None:
     from rapidfuzz import fuzz
-    _db_correction.upsert_all(({"key": key, "value": v, "similarity": fuzz.partial_ratio(key, v)} for v in values),
-                              pk=["key", "value"])  # type: ignore
+
+    _db_correction.upsert_all(
+        ({"key": key, "value": v, "similarity": fuzz.partial_ratio(key, v)} for v in values), pk=["key", "value"]
+    )  # type: ignore
 
 
 # def add_identity_corrections(values: Iterable[str]) -> None:
@@ -119,7 +129,7 @@ def get_correction(key: str) -> Iterable[str]:
     sql = """select value
              from correction
              where key = ?"""
-    return map(itemgetter(0), db.execute(sql, (key, )))
+    return map(itemgetter(0), db.execute(sql, (key,)))
 
 
 def get_corrections(keys: Iterable[str]) -> Iterable[str]:
@@ -145,9 +155,14 @@ def remove_wd_search_keys(given: Iterable[str]) -> None:
 
 def add_wd_search(search: list[str], res: list[list[dict]]) -> None:
     _db_wikidata_search_idx.upsert_all([{"key": k} for k in search], pk="key")  # type: ignore
-    _db_wikidata_search.upsert_all(({"key": k, "id": x["id"], "match": x["match"], "rank": i}
-                                    for k, v in zip(search, res) for i, x in enumerate(v)),
-                                   pk=["key", "id"])  # type: ignore
+    _db_wikidata_search.upsert_all(
+        (
+            {"key": k, "id": x["id"], "match": x["match"], "rank": i}
+            for k, v in zip(search, res)
+            for i, x in enumerate(v)
+        ),
+        pk=["key", "id"],
+    )  # type: ignore
 
 
 def get_wd_search(key: str | Iterable[str]) -> Iterable[tuple[str, str, int]]:
@@ -155,7 +170,7 @@ def get_wd_search(key: str | Iterable[str]) -> Iterable[tuple[str, str, int]]:
         sql = """select id, match, rank
                  from wikidata_search
                  where key = ?"""
-        return db.execute(sql, (key, ))
+        return db.execute(sql, (key,))
     else:
         sql = f"""select id, match, min(rank)
                   from wikidata_search
@@ -166,25 +181,30 @@ def get_wd_search(key: str | Iterable[str]) -> Iterable[tuple[str, str, int]]:
 
 def get_wd_entity_keys(given: Iterable[str], with_properties: bool) -> set[str]:
     if with_properties:
-        keys_in_db = get_keys_in_table("wikidata_entity", "qid", given, "properties is not null")
+        keys_in_db = get_keys_in_table("wikidata_entity", "qid", given, "label is not null and properties is not null")
     else:
-        keys_in_db = get_keys_in_table("wikidata_entity", "qid", given)
+        keys_in_db = get_keys_in_table("wikidata_entity", "qid", given, "label is not null")
     return set(given) - keys_in_db
 
 
 def add_wd_entities(ids: list[str], res: dict[str, list]) -> None:
-    _db_wikidata_entity.upsert_all(({ # type: ignore
-        "qid": ids[i],
-        "label": res["labels/en"][i] or "",
-        "description": res["descriptions/en"][i] or "",
-        "aliases": res["aliases/en"][i] or [],
-        "properties": res["properties"][i] or {} if "properties" in res else None,
-    } for i in range(len(ids))),
-                                     pk="qid") # type: ignore
+    _db_wikidata_entity.upsert_all(
+        (
+            {  # type: ignore
+                "qid": ids[i],
+                "label": res["labels/en"][i] or "",
+                "description": res["descriptions/en"][i] or "",
+                "aliases": res["aliases/en"][i] or [],
+                "properties": res["properties"][i] or {} if "properties" in res else None,
+            }
+            for i in range(len(ids))
+        ),
+        pk="qid",
+    )  # type: ignore
 
 
 def get_wd_entity(qid: str) -> tuple[str, str, str, str, str]:
-    return db.execute("select * from wikidata_entity where qid = ?", (qid, )).fetchone()
+    return db.execute("select * from wikidata_entity where qid = ?", (qid,)).fetchone()
 
 
 def get_wd_ids_in_properties(ids: Iterable[str]) -> set[str]:
@@ -192,10 +212,7 @@ def get_wd_ids_in_properties(ids: Iterable[str]) -> set[str]:
               from wikidata_entity
               where properties is not null and qid in {_L(ids)}"""
     return {
-        a[1]
-        for p in db.execute(sql)
-        for k, v in json.loads(p[0]).items()
-        for a in v if a[0] == "wikibase-entityid"
+        a[1] for p in db.execute(sql) for k, v in json.loads(p[0]).items() for a in v if a[0] == "wikibase-entityid"
     }
 
 
@@ -206,7 +223,10 @@ def get_wd_ids_of_P31(ids: Iterable[str]) -> set[str]:
     return {
         a[1]
         for p in db.execute(sql)
-        for k, v in json.loads(p[0]).items() if k in ("P31", "P279") for a in v if a[0] == "wikibase-entityid"
+        for k, v in json.loads(p[0]).items()
+        if k in ("P31", "P279")
+        for a in v
+        if a[0] == "wikibase-entityid"
     }
 
 

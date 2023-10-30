@@ -11,8 +11,7 @@ class Entity:
     properties: dict[str, list[Any]] | None = field(default=None)
 
     def iter_aliases(self) -> Iterable[str]:
-        if self.label:
-            yield self.label
+        yield self.label
         if self.aliases:
             yield from self.aliases
 
@@ -20,6 +19,16 @@ class Entity:
         assert self.properties is not None
         if "P279" in self.properties:
             yield from (pp[1] for pp in self.properties["P279"])
+
+    def iter_props(self) -> Iterable[str]:
+        props = self.properties
+        assert props is not None
+        return (f"{k}={p[1]}" for k, v in props.items() if v and v[0][0] == "wikibase-entityid" for p in v)
+
+    def iter_prop_groups(self) -> Iterable[tuple[str, list[str]]]:
+        props = self.properties
+        assert props is not None
+        return ((k, [p[1] for p in v]) for k, v in props.items() if v and v[0][0] == "wikibase-entityid")
 
     def to_dict(self):
         return {

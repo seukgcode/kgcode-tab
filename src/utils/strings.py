@@ -13,7 +13,7 @@ def despaces(s: str) -> str:
     Returns:
         str: The string after space removal
     """
-    return " ".join(s.split()).strip(" ‘\".;:,").removesuffix("(").removeprefix(")").removeprefix(",")
+    return " ".join(s.split()).strip(' ‘".;:,').removesuffix("(").removeprefix(")").removeprefix(",")
 
 
 def remove_symbols(s: str) -> str:
@@ -35,5 +35,5 @@ def split_word(text: str) -> str:
     b = word_pattern.findall(text)
     l = min(len(a), len(b))
     temp = [b[i] if a[i] == "" else a[i] + b[i] for i in range(l)]
-    temp += a[l :] + b[l :]
+    temp += a[l:] + b[l:]
     return despaces(" ".join(temp))

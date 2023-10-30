@@ -1,9 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor, wait
 from itertools import chain
 from pathlib import Path
 from typing import Any, ClassVar, Iterable
-from concurrent.futures import ThreadPoolExecutor, wait
-import ormsgpack
+
 import orjson as json
+import ormsgpack
 
 from ..searchmanage import SearchManage
 from ..table import Entity
@@ -17,6 +18,9 @@ logger.info("Load wikibase")
 class EntityManager:
     sc: ClassVar[SearchManage] = SearchManage(key="ids", m_num=config.get_("process.entity.concurrency", 200))
     entities: ClassVar[dict[str, Entity]] = {}
+
+    search_keys: ClassVar[list[str]] = ["labels/en", "descriptions/en", "aliases/en"]
+    search_keys_p: ClassVar[list[str]] = ["labels/en", "descriptions/en", "aliases/en", "properties"]
 
     @classmethod
     def store_wikidata_entities(
@@ -49,24 +53,32 @@ class EntityManager:
 
     @classmethod
     def chunked_search(cls, qids_search: list[str], with_properties: bool = True) -> None:
-        keys = ["labels/en", "descriptions/en", "aliases/en"]
-        if with_properties:
-            keys.append("properties")
-
         res = cls.sc.search_run(
             qids_search,
             timeout=config.get_("process.entity.timeout", 30),
             block_num=config.get_("process.entity.block_num", 3),
-            keys=keys
+            keys=cls.search_keys_p if with_properties else cls.search_keys
         )
 
         dbhelper.add_wd_entities(qids_search, res)
 
     @classmethod
+    def store_wikidata_entity(cls, qid: str):
+        cls.chunked_search([qid])
+
+    @classmethod
+    def has(cls, qid: str) -> bool:
+        return qid in cls.entities
+
+    @classmethod
     def get(cls, qid: str, force: bool = False) -> Entity:
         e = cls.entities.get(qid, None)
-        if not e or force and e.properties is None:
+        if not e or e.label is None or force and e.properties is None:
             ee = dbhelper.get_wd_entity(qid)
+            if not ee or ee[1] is None or force and ee[4] is None:
+                logger.debug(f"Get {qid} as need.")
+                cls.store_wikidata_entity(qid)
+                ee = dbhelper.get_wd_entity(qid)
             e = Entity(
                 qid=ee[0],
                 label=ee[1],
@@ -76,6 +88,10 @@ class EntityManager:
             )
             cls.entities[qid] = e
         return e
+
+    @classmethod
+    def gets(cls, qids: list[str], force: bool = False) -> list[Entity]:
+        return [cls.get(q, force) for q in qids]
 
     @classmethod
     def get_type_ancestors(cls, entity: Entity, depth: int = 3) -> Iterable[tuple[int, str]]:
@@ -90,7 +106,6 @@ class EntityManager:
     def get_subclasses(cls, qid: str) -> Iterable[str]:
         """entity是一个 instance of 的实体"""
         return cls.get(qid, force=True).iter_subclasses()
-
 
     @classmethod
     def __load_mt(cls, path: Path) -> dict[str, Any]:

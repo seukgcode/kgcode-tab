@@ -5,7 +5,7 @@ from typing_extensions import override
 
 from ..searchmanage import DbpediaLookUp, SearchManage
 from ..utils import logger
-from ..utils.lists import transpose_dictlist_2d, unique
+from ..utils.lists import transpose_dictlist_2d
 from . import dbhelper
 from .chunking import search_chunk
 
@@ -59,13 +59,7 @@ class SearchHelper:
 
 class WDSearch(SearchHelper):
     def __init__(
-        self,
-        *,
-        concurrency: int = 100,
-        chunk_size: int = 1000,
-        timeout: float = 30,
-        block_num: int = 3,
-        limit: int = 50
+        self, *, concurrency: int = 50, chunk_size: int = 1000, timeout: float = 30, block_num: int = 3, limit: int = 50
     ) -> None:
         super().__init__("wd", chunk_size=chunk_size)
         self.sm = SearchManage(m_num=concurrency)
@@ -78,7 +72,15 @@ class WDSearch(SearchHelper):
         re_ = self.sm.search_run(
             texts_to_search, keys="all", timeout=self.timeout, block_num=self.block_num, limit=self.limit
         )
-        return transpose_dictlist_2d(re_)
+        re_ = transpose_dictlist_2d(re_)
+        re_ = [[b for b in a if not WDSearch.is_ambiguity(b)] for a in re_]
+        return re_
+
+    @staticmethod
+    def is_ambiguity(a: dict[str, Any]):
+        return (a.get("label") or "").lower() == "wikimedia disambiguation page" or (
+            a.get("description") or ""
+        ).lower() == "wikimedia disambiguation page"
 
 
 class DBPSearch(SearchHelper):

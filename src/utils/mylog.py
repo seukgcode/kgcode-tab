@@ -1,26 +1,26 @@
+import logging
 from typing import Any
+
+import colorlog
 
 from . import config
 
 
 def _init_logger():
-    import logging
-    import colorlog
-
     logger = colorlog.getLogger(config["logger"]["name"])
 
     log_colors_config = {
-        'DEBUG': 'white',  # cyan white
-        'INFO': 'green',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'CRITICAL': 'bold_red',
+        "DEBUG": "white",  # cyan white
+        "INFO": "green",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red",
     }
 
     # 输出到控制台
     console_handler = colorlog.StreamHandler()
     # 输出到文件
-    file_handler = logging.FileHandler(filename=config["logger"]["log_path"], mode='a', encoding='utf8')
+    file_handler = logging.FileHandler(filename=config["logger"]["log_path"], mode="a", encoding="utf8")
 
     # 日志级别，logger 和 handler以最高级别为准，不同handler之间可以不一样，不相互影响
     logger.setLevel(logging.DEBUG)
@@ -29,9 +29,11 @@ def _init_logger():
 
     # 日志输出格式
     console_formatter = colorlog.ColoredFormatter(
-        fmt='%(log_color)s[%(asctime)s] [%(levelname)s] %(message)s', log_colors=log_colors_config
+        fmt="%(log_color)s[%(asctime)s] [%(levelname)s] %(message)s", log_colors=log_colors_config
     )
-    file_formatter = logging.Formatter(fmt='[%(asctime)s] [%(levelname)s] %(message)s', )
+    file_formatter = logging.Formatter(
+        fmt="[%(asctime)s] [%(levelname)s] %(message)s",
+    )
 
     console_handler.setFormatter(console_formatter)
     file_handler.setFormatter(file_formatter)
@@ -60,7 +62,7 @@ def colored(
     bg: int | tuple[int, int, int] | None = None,
     bright: bool = False,
     underline: bool = False,
-    flash: bool = False
+    flash: bool = False,
 ) -> str:
     code: list[int] = []
     if bright:
@@ -80,9 +82,9 @@ def colored(
     return f"\033[{';'.join(map(str, code))}m{s}\33[0m"
 
 
-if __name__ == '__main__':
-    logger.debug('debug')
-    logger.info('info')
-    logger.warning('warning')
-    logger.error('error')
-    logger.critical('critical')
+if __name__ == "__main__":
+    logger.debug("debug")
+    logger.info("info")
+    logger.warning("warning")
+    logger.error("error")
+    logger.critical("critical")

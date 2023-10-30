@@ -1,14 +1,34 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Any, Iterable, Literal, Optional, TypeAlias, overload
 
-from dataclasses_json import CatchAll, DataClassJsonMixin, Exclude, config
-
 from .entity import Entity
 
-SpacyType: TypeAlias = Literal['PERSON', 'NORP', 'FAC', 'ORG', 'GPE', 'LOC', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LAW',
-                               'LANGUAGE', 'DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']
+SpacyType: TypeAlias = Literal[
+    "PERSON",
+    "NORP",
+    "FAC",
+    "ORG",
+    "GPE",
+    "LOC",
+    "PRODUCT",
+    "EVENT",
+    "WORK_OF_ART",
+    "LAW",
+    "LANGUAGE",
+    "DATE",
+    "TIME",
+    "PERCENT",
+    "MONEY",
+    "QUANTITY",
+    "ORDINAL",
+    "CARDINAL",
+]
+
+excl = set(Path("data/exclude.txt").read_text().splitlines())
 
 
 class WDValueType:
@@ -20,8 +40,14 @@ class WDValueType:
     Quantity: TypeAlias = tuple[Literal["quantity"], str]
 
 
-PropertyList: TypeAlias = list[WDValueType.WikibaseEntityId] | list[WDValueType.GlobeCoordinate]  | list[WDValueType.Time] | \
-    list[WDValueType.String] | list[WDValueType.MonolingualText]  | list[WDValueType.Quantity]
+PropertyList: TypeAlias = (
+    list[WDValueType.WikibaseEntityId]
+    | list[WDValueType.GlobeCoordinate]
+    | list[WDValueType.Time]
+    | list[WDValueType.String]
+    | list[WDValueType.MonolingualText]
+    | list[WDValueType.Quantity]
+)
 
 
 @dataclass
@@ -31,13 +57,16 @@ class Candidate:
     rank: int
     score: float
     st_score: float = 1
+    cell: Cell | None = None
     metadata: Any = None
     _entity: Entity | None = None
     _type_ancestors: list[tuple[int, str]] | None = None
+    _type_ancestor_hint: int = -1
 
     @property
     def entity(self) -> Entity:
         from ..process.wikibase import EntityManager
+
         if not self._entity:
             self._entity = EntityManager.get(self.qid)
         return self._entity
@@ -45,6 +74,7 @@ class Candidate:
     @property
     def entity_p(self) -> Entity:
         from ..process.wikibase import EntityManager
+
         if not self._entity or self._entity.properties is None:
             self._entity = EntityManager.get(self.qid, force=True)
         return self._entity
@@ -55,12 +85,14 @@ class Candidate:
         return (p[1] for p in self.entity_p.properties.get("P31", []))
 
     def iter_type_ancestors(self, depth: int = 3) -> Iterable[tuple[int, str]]:
-        if self._type_ancestors is None:
+        if self._type_ancestors is None or depth != self._type_ancestor_hint:
+            self._type_ancestor_hint = depth
             self._type_ancestors = list(self.__iter_type_ancestors(depth))
         yield from self._type_ancestors
 
     def __iter_type_ancestors(self, depth: int) -> Iterable[tuple[int, str]]:
         from ..process.wikibase import EntityManager
+
         assert self.entity_p.properties is not None
         classes: list[str] = [p[1] for p in self.entity_p.properties.get("P31", [])]
         yield from ((0, x) for x in classes)
@@ -71,6 +103,7 @@ class Candidate:
     def iter_entity_props(self) -> Iterable[str]:
         props = self.entity_p.properties
         assert props is not None
+        # return (k for k in props.keys() if k not in excl)
         return (f"{k}={p[1]}" for k, v in props.items() if v and v[0][0] == "wikibase-entityid" for p in v)
 
     def iter_entity_prop_groups(self) -> Iterable[tuple[str, list[str]]]:
@@ -99,6 +132,9 @@ class Candidate:
             metadata=kvs.get("metadata"),
         )
 
+    def __hash__(self):
+        return hash(self.qid)
+
 
 @dataclass
 class Cell:
@@ -107,7 +143,12 @@ class Cell:
     value: str
     corrections: list[str]
     candidates: list[Candidate] = field(default_factory=lambda: [])
+    candidates_ini: list[Candidate] = field(default_factory=lambda: [])  # 初始候选项
     metadata: Any = None
+
+    def backref(self):
+        for ca in self.candidates:
+            ca.cell = self
 
     def __getitem__(self, k: int) -> Candidate:
         # if not self.candidates:
@@ -129,14 +170,18 @@ class Cell:
 
     @classmethod
     def from_dict(cls, kvs: dict):
-        return cls(
+        candidates = [Candidate.from_dict(a) for a in kvs["candidates"]]
+        cell = cls(
             is_none=kvs["is_none"],
             text=kvs.get("text", kvs["value"]),
             value=kvs["value"],
             corrections=kvs["corrections"],
-            candidates=[Candidate.from_dict(a) for a in kvs["candidates"]],
+            candidates=candidates,
+            candidates_ini=candidates,
             metadata=kvs.get("metadata"),
         )
+        cell.backref()
+        return cell
 
 
 @dataclass
@@ -146,6 +191,7 @@ class Column:
     numerical: bool
     keyable: bool = False
     type: SpacyType | None = None
+    name: str | None = None
     cells: list[Cell] = field(default_factory=lambda: [])
     metadata: Any = None
 
@@ -169,6 +215,7 @@ class Column:
             "numerical": self.numerical,
             "keyable": self.keyable,
             "type": self.type,
+            "name": self.name,
             "cells": list(map(Cell.to_dict, self.cells)),
             "metadata": self.metadata,
         }
@@ -181,6 +228,7 @@ class Column:
             numerical=kvs.get("numerical", False),
             keyable=kvs.get("keyable", False),
             type=kvs["type"],
+            name=kvs["name"],
             cells=[Cell.from_dict(a) for a in kvs["cells"]],
             metadata=kvs.get("metadata"),
         )
@@ -190,22 +238,22 @@ class Column:
 class Table:
     path: Optional[str]
     name: str
-    '''Name of the table'''
+    """Name of the table"""
     rows: int
-    '''Number of rows'''
+    """Number of rows"""
     cols: int
-    '''Number of columns'''
+    """Number of columns"""
     columns: list[Column]
-    '''Column data'''
+    """Column data"""
     key_col: int = 0
     row_texts: list[str] = field(default_factory=lambda: [])
-    '''Index of key/subject column'''
+    """Index of key/subject column"""
     searchable: bool = False
-    '''Any column is searchable'''
+    """Any column is searchable"""
     processed: bool = False
     retrieved: bool = False
     completed: bool = False
-    '''Whether this table is processed'''
+    """Whether this table is processed"""
     metadata: Any = None
 
     @property
@@ -256,6 +304,10 @@ class Table:
 
     @classmethod
     def from_dict(cls, kvs: dict):
+        columns = [Column.from_dict(a) for a in kvs["columns"]]
+        row_texts = kvs.get("row_texts", [])
+        if not row_texts:
+            row_texts = ["; ".join(col[i].text for col in columns) for i in range(len(columns[0].cells))]
         return cls(
             path=kvs.get("path"),
             name=kvs["name"],
@@ -263,7 +315,7 @@ class Table:
             cols=kvs["cols"],
             columns=[Column.from_dict(a) for a in kvs["columns"]],
             key_col=kvs["key_col"],
-            row_texts=kvs.get("row_texts", ""),
+            row_texts=row_texts,
             searchable=kvs["searchable"],
             processed=kvs["processed"],
             retrieved=kvs["retrieved"],

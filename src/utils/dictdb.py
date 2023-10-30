@@ -25,8 +25,8 @@ class DictDb(dict):
     def auto_flush(self, iterable: Iterable[T], interval: float = 60) -> Iterable[T]:
         last_flush = time.time()
         flushed = True
-        for t in iterable:
-            yield t
+        for it in iterable:
+            yield it
             t = time.time()
             if t - last_flush > interval:
                 last_flush = t

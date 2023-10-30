@@ -1,41 +1,55 @@
 import re
 import uuid
 from pathlib import Path
+from typing import Literal, Sequence
 
 import pandas as pd
+from more_itertools import first_true, flatten, prepend
 from rapidfuzz import fuzz
-from rapidfuzz.utils import default_process
-# from sentence_transformers import SentenceTransformer, util
 from tqdm import tqdm
 
 from ..datasets import TableDataset
 from ..table import Candidate, Cell, Column, Table
 from ..table.table_data import SpacyType
 from ..utils import DictDb, PathLike, config, logger
-from ..utils.lists import flatten, make_list, super_flat, super_flat_back
+from ..utils.lists import make_list
 from ..utils.strings import despaces
+from . import filters as F
 from .correctors import CheckRequester, SpellChecker
+from .filters import CandidateFilter
 from .wikibase import EntityManager
 from .wikisearch import SearchHelper
 
 logger.info("Load preprocess module")
 
-# model = SentenceTransformer('stsb-mpnet-base-v2', device="cuda", cache_folder="./models")
-# model = SentenceTransformer('paraphrase-MiniLM-L6-v2', device="cuda", cache_folder="./models")
-# print(model, model._target_device)
-
 LABEL_: dict[SpacyType, int] = {
-    'PERSON': 0, 'NORP': 0, 'FAC': 0, 'ORG': 0, 'GPE': 0, 'LOC': 0, 'PRODUCT': 0, 'EVENT': 0, 'WORK_OF_ART': 0, 'LAW':
-    0, 'LANGUAGE': 0, 'DATE': 0, 'TIME': 0, 'PERCENT': 0, 'MONEY': 0, 'QUANTITY': 0, 'ORDINAL': 0, 'CARDINAL': 0
+    "PERSON": 0,
+    "NORP": 0,
+    "FAC": 0,
+    "ORG": 0,
+    "GPE": 0,
+    "LOC": 0,
+    "PRODUCT": 0,
+    "EVENT": 0,
+    "WORK_OF_ART": 0,
+    "LAW": 0,
+    "LANGUAGE": 0,
+    "DATE": 0,
+    "TIME": 0,
+    "PERCENT": 0,
+    "MONEY": 0,
+    "QUANTITY": 0,
+    "ORDINAL": 0,
+    "CARDINAL": 0,
 }
 
+_digits_pat = re.compile(r"[0-9/.+-]+%?")
 
-def mixed_ratio(s1: str, s2: str):
-    # p1 = default_process(s1)
-    # p2 = default_process(s2)
-    # return (fuzz.ratio(p1, p2) + fuzz.partial_ratio(p1, p2)) / 2
-    return fuzz.partial_ratio(s1, s2, processor=default_process)
-    # For Limaye, partial is better
+
+def _is_numerical(series: pd.Series):
+    tot = sum(bool(str(x)) for x in series)
+    cnt = sum(bool(_digits_pat.fullmatch(str(x))) for x in series)
+    return tot == 0 or cnt / tot > 0.9 or cnt > 2 and cnt >= tot - 1
 
 
 class TableTask:
@@ -44,7 +58,9 @@ class TableTask:
 
     @classmethod
     def from_dataframe(cls, data_frame: pd.DataFrame, *, path: PathLike | None = None, name: str = ""):
-        data: list[list[object]] = data_frame.fillna("").transpose().values.tolist()
+        data_frame_nona = data_frame.fillna("")
+        data: list[list[object]] = data_frame_nona.transpose().values.tolist()
+        has_header = any(not str(s).startswith("col") for s in data_frame.columns.values)
         table = Table(
             path=str(path) if path else None,
             name=name or str(uuid.uuid1()),
@@ -54,8 +70,9 @@ class TableTask:
                 Column(
                     empty=False,
                     searchable=False,
-                    numerical=data_frame.dtypes[i] != object,
+                    numerical=data_frame.dtypes[i] != object or _is_numerical(data_frame_nona.iloc[:, i]),
                     type=None,
+                    name=str(data_frame.columns.values[i]) if has_header else None,
                     cells=[
                         Cell(
                             is_none=cell is None or cell == "",
@@ -63,11 +80,13 @@ class TableTask:
                             value=despaces(str(cell)),
                             corrections=[],
                             candidates=[],
-                        ) for cell in col
-                    ]
-                ) for i, col in enumerate(data)
+                        )
+                        for cell in col
+                    ],
+                )
+                for i, col in enumerate(data)
             ],
-            row_texts=[",".join(map(str, r)) for _, r in data_frame.iterrows()]
+            row_texts=["; ".join(map(str, filter(bool, r))) for _, r in data_frame_nona.iterrows()],
         )
         return cls(table)
 
@@ -93,7 +112,12 @@ class TableTask:
 
     def judge_columns_category(self) -> None:
         """Judge the category of all tables columns."""
+
         # judge all columns type
+
+        def is_of_url(col: Column):
+            return any("../" in s for s in col.cell_texts)
+
         # from .nlp_model import spacy_nlp
         self.table.searchable = False
         num_pat = re.compile(r"[0-9/.-]+%?")
@@ -116,7 +140,9 @@ class TableTask:
             #                + label_['QUANTITY'] + label_['ORDINAL'] + label_['CARDINAL'] + none_
             # type_ = max(label_, key=lambda k: label_[k])
             # col.type = type_
-            if (not col.numerical and any(s and not num_pat.fullmatch(s) for s in self.table[col_index].cell_texts)):
+            if is_of_url(col):
+                logger.warn("ohhh! %s", self.table.name)
+            if not col.numerical and not is_of_url(col):
                 col.searchable = True
                 self.table.searchable = True
 
@@ -127,9 +153,7 @@ class TableTask:
             return
         self.table.key_col = next((i for i, col in enumerate(self.table.columns) if col.searchable), 0)
 
-    def retrieve_data(self, searcher: SearchHelper, *, force: bool = False) -> None:
-        if self.table.retrieved and not force:
-            return
+    def retrieve_data_fwd(self, searcher: SearchHelper):
         for col in self.table.columns:
             if not col.searchable:
                 for cell in col.cells:
@@ -140,42 +164,36 @@ class TableTask:
                 if cell.is_none:
                     continue
                 cell.corrections = SpellChecker.get(cell.value) + [cell.value.lower()]
+                # 这里要存什么？返回
                 cc = searcher.get(cell.corrections)
-                # cc = searcher.get(cell.value)
-                cell.candidates = sorted((Candidate(qid=c[0], match=c[1], rank=c[2], score=0) for c in cc),
-                                         key=lambda c: c.rank)
+                cell.candidates = [Candidate(qid=c[0], match=c[1], rank=c[2], score=0) for c in cc]
+                cell.backref()
+                yield from (ca.qid for ca in cell.candidates)
+
+    def retrieve_data(self, searcher: SearchHelper, *, force: bool = False, filters: Sequence[CandidateFilter]) -> None:
+        if self.table.retrieved and not force:
+            return
+        for col in self.table.columns:
+            for cell in col.cells:
+                if cell.is_none:
+                    continue
+                # cell.corrections = SpellChecker.get(cell.value) + [cell.value.lower()]
+                # cc = searcher.get(cell.corrections)
+                # # cc = searcher.get(cell.value)
+                # cell.candidates = [Candidate(qid=c[0], match=c[1], rank=c[2], score=0) for c in cc]
+                # cell.backref()
+                cell.candidates_ini = cell.candidates = F.pipe(filters, cell.candidates)
         self.table.retrieved = True
 
-    def finalize(self, force: bool = False):
+    def finalize(self, *, force: bool = False, filters: Sequence[CandidateFilter]):
         if self.table.completed and not force:
             return
-
-        def scorer(text: str, qid: str, match: str) -> float:
-            e = EntityManager.get(qid)
-            s = (
-                mixed_ratio(text, e.label)
-                if match == "label" or not e.aliases else max(mixed_ratio(text, a) for a in e.aliases)
-            ) / 100
-            return s
 
         for cell in self.table.iter_cells():
             if cell.is_none or not cell.candidates:
                 continue
-            for ca in cell:
-                ca.score = scorer(cell.value, ca.qid, ca.match)
-            cell.candidates.sort(key=lambda c: -c.score / (1 + c.rank)**0.25)
-            # cell.candidates = cell.candidates[: 100]
-        # row_embeddings = model.encode(self.table.row_texts, normalize_embeddings=True)
-        # embeddings = model.encode([ca.entity.label for ca in self.table.iter_candidates()], normalize_embeddings=True)
-        # it = iter(embeddings)
-        # for i in range(self.table.cols):
-        #     for j in range(self.table.rows):
-        #         cell = self.table[i, j]
-        #         if cell.is_none or not cell.candidates:
-        #             continue
-        #         for ca in cell:
-        #             ca.st_score = float(util.dot_score(row_embeddings[j], next(it))) / 2 + 0.5
-        # cell.candidates.sort(key=lambda c: -c.score / (1 + c.rank)**0.25)
+            cell.candidates_ini = cell.candidates = F.pipe(prepend(F.filter_ambiguity, filters), cell.candidates)
+
         self.table.completed = True
 
     def limit_candidates(self, limit: int = -1):
@@ -183,7 +201,7 @@ class TableTask:
             return
         for c in self.table:
             for ce in c:
-                ce.candidates = ce.candidates[: limit]
+                ce.candidates = ce.candidates_ini[:limit]
 
 
 class TableProcessor:
@@ -193,9 +211,9 @@ class TableProcessor:
         self.db = DictDb(db_path)
         logger.info("Found %d tables in DB.", len(self.db))
 
-    '''
+    """
     看name，如果已经在db里了，且不是force，用已有的
-    '''
+    """
 
     def _add_table_from_dataframe(self, df: pd.DataFrame, path: Path | None, force: bool) -> bool:
         if path and not force and path.stem in self.db:
@@ -246,6 +264,11 @@ class TableProcessor:
     def get_table(self, name: str) -> Table:
         return Table.from_dict(self.db[name])
 
+    def get_table_in_task(self, name: str) -> Table:
+        res = first_true(self.tasks, pred=lambda t: t.table.name == name)
+        assert res
+        return res.table
+
     def save_table(self, table: Table, flush: bool = False) -> None:
         self.db[str(table.name)] = table.to_dict()
         if flush:
@@ -263,11 +286,13 @@ class TableProcessor:
         searchers: list[SearchHelper] | SearchHelper,
         *,
         force_init: bool = False,
-        force_correct: bool = False,
+        force_correct: bool | Literal["add"] = False,
         force_search: bool = False,
         force_retrieve: bool = False,
         force_query: bool = False,
         skip_query: bool = False,
+        retrieval_filters: Sequence[CandidateFilter] | None = None,
+        final_filters: Sequence[CandidateFilter] | None = None,
     ) -> None:
         logger.info("Start processing tables.")
 
@@ -293,9 +318,14 @@ class TableProcessor:
 
         # Step 3: 回填
         logger.info("Start back-patching.")
+        if retrieval_filters is None:
+            retrieval_filters = [F.order_by_rank, F.limiter(50)]
         if searchers:
-            for t in (self.tasks):
-                t.retrieve_data(searchers_[0], force=force_retrieve)
+            logger.info("Start forward querying.")
+            qids = flatten(task.retrieve_data_fwd(searchers_[0]) for task in self.tasks)
+            EntityManager.store_wikidata_entities(qids, force=force_query, with_properties=False)
+            for t in self.tasks:
+                t.retrieve_data(searchers_[0], force=force_retrieve, filters=retrieval_filters)
                 self.save_task(t)
             self.db.flush()
 
@@ -306,8 +336,13 @@ class TableProcessor:
             EntityManager.store_wikidata_entities(qids, force=force_query, level=ancestor_level)
 
         logger.info("Start finalizing.")
+        if final_filters is None:
+            final_filters = [
+                F.score_by_ratio(fuzz.ratio),
+                F.order_by(key=lambda c: -c.score / (1 + c.rank) ** 0.25),
+            ]
         for t in tqdm(self.tasks, colour="#ADD8E6"):
-            t.finalize(force=True)
+            t.finalize(force=True, filters=final_filters)
             self.save_task(t)
         self.db.flush()
         logger.info("Process completed.")

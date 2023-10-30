@@ -1,2 +1,2 @@
-from .table_data import Table, Column, Cell, Candidate, PropertyList, SpacyType, WDValueType
 from .entity import Entity
+from .table_data import Candidate, Cell, Column, PropertyList, SpacyType, Table, WDValueType

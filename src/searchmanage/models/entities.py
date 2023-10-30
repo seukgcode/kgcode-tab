@@ -2,8 +2,8 @@ import random
 from typing import List, Union
 from warnings import warn
 
-import requests
 from requests import ReadTimeout, Response
+from requests_html2 import HTMLSession
 
 from .. import logger
 from ..tools import AnalysisTools, Tools
@@ -103,22 +103,22 @@ class RequestAnalysis(object):
 class Entities(RequestAnalysis):
     """Class of a single entity as an element in next querying using multithread.
 
-        Store entity's based information like its index, entities text or ids in
-        searching, and  search parameters.
+    Store entity's based information like its index, entities text or ids in
+    searching, and  search parameters.
 
-        :ivar __index(int):
-            store entity's index for restoring the
-            correct location after multithreading
-        :ivar __entities(list):
-            entities text or ids into searching
-        :ivar __params(Union[dict, str]):
-            search parameters in querying
-        :ivar __Request(Union[dict, str, None]):
-            json data
-        :ivar __ready_(bool):
-            record whether json data is ready
-        :ivar __analysis(Union[dict, list, str,None]):
-            result of analysis for json data
+    :ivar __index(int):
+        store entity's index for restoring the
+        correct location after multithreading
+    :ivar __entities(list):
+        entities text or ids into searching
+    :ivar __params(Union[dict, str]):
+        search parameters in querying
+    :ivar __Request(Union[dict, str, None]):
+        json data
+    :ivar __ready_(bool):
+        record whether json data is ready
+    :ivar __analysis(Union[dict, list, str,None]):
+        result of analysis for json data
     """
 
     def __init__(self):
@@ -126,7 +126,7 @@ class Entities(RequestAnalysis):
         self.__index = 0
         self.__entities = None
         self.__params = None
-        self.session = requests.Session()
+        self.session = HTMLSession()
 
     def set_entities(self, index: int, entities: Union[list, None]):
         """Set entity's index and entities.
@@ -155,31 +155,31 @@ class Entities(RequestAnalysis):
             - https://www.wikidata.org/w/api.php?action=help&modules=wbsearchentities
             - https://www.wikidata.org/w/api.php?action=help&modules=wbgetentities
         """
-        if key == 'search':
+        if key == "search":
             self.__params = {
-                'search': search_entities,
-                'action': 'wbsearchentities',
-                'format': 'json',
-                'language': 'en',
-                'type': 'item',
-                'limit': 10,
-                'strictlanguage': None,
-                'continue': None,
-                'props': None
+                "search": search_entities,
+                "action": "wbsearchentities",
+                "format": "json",
+                "language": "en",
+                "type": "item",
+                "limit": 10,
+                "strictlanguage": None,
+                "continue": None,
+                "props": None,
             }
-        elif key == 'ids':
+        elif key == "ids":
             self.__params = {
-                'ids': search_entities,
-                'action': 'wbgetentities',
-                'format': 'json',
-                'languages': 'en',
-                'redirects': None,
-                'sites': None,
-                'title': None,
-                'props': None,
-                'languagefallback': None,
-                'normalize': None,
-                'sitefilter': None
+                "ids": search_entities,
+                "action": "wbgetentities",
+                "format": "json",
+                "languages": "en",
+                "redirects": None,
+                "sites": None,
+                "title": None,
+                "props": None,
+                "languagefallback": None,
+                "normalize": None,
+                "sitefilter": None,
             }
         else:
             raise ValueError("No key = %s" % key)
@@ -236,7 +236,7 @@ class Entities(RequestAnalysis):
             get_ = self.session.get(
                 url=url,
                 params=self.__params,
-                headers={'User-Agent': random.choice(AGENTS_)},
+                headers={"User-Agent": random.choice(AGENTS_)},
                 timeout=timeout,
             )
         except ReadTimeout:
@@ -284,9 +284,9 @@ class Entities(RequestAnalysis):
         """
         if not self.ready:
             return None
-        if key == 'search':
+        if key == "search":
             self.run_analysis(function=AnalysisTools.search_analysis, keys=keys)
-        elif key == 'ids':
+        elif key == "ids":
             self.run_analysis(function=AnalysisTools.entities_analysis, keys=keys)
             self.correct_id_repeat()
 
@@ -309,7 +309,7 @@ class Entities(RequestAnalysis):
         """
         if not self.ready:
             return None
-        if key == 'ids':
+        if key == "ids":
             self.run_analysis(function=function, *args, **kwargs)
             self.correct_id_repeat()
         else:

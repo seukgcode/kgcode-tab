@@ -17,6 +17,7 @@ class SemTabEvaluator:
         self.gt = gt.drop_nulls(gt.columns[-1])
         self.columns = gt.columns
         self.gt_ans = {self._row_key(row): str(row[-1] or "NIL") for row in gt.iter_rows() if not drop_nil or row[-1]}
+        self.scope = set[str]()
 
     def _row_key(self, row: tuple[Any, ...]) -> str:
         return ' '.join(map(str, row[:-1]))
@@ -26,10 +27,13 @@ class SemTabEvaluator:
         ...
 
     def iter_submission(self, submission_file_path: PathLike) -> Iterable[tuple[tuple[Any, ...], str]]:
-        sub = pl.read_csv(submission_file_path, has_header=False, dtypes=self.gt.dtypes)
-
         self.annotated = set[str]()
         self._err: list[list[str]] = []
+
+        try:
+            sub = pl.read_csv(submission_file_path, has_header=False, dtypes=self.gt.dtypes)
+        except Exception:
+            return
 
         for row in sub.iter_rows():
             key = self._row_key(row)
@@ -51,7 +55,7 @@ class SemTabEvaluator:
         misses = []
         for row in self.gt.iter_rows():
             key = self._row_key(row)
-            if key not in self.annotated:
+            if key not in self.annotated and key.split()[0] in self.scope:
                 misses.append(row)
         df1 = pd.DataFrame(self._err, columns=[*self.columns[:-1], 'gt', self.columns[-1]])
         df2 = pd.DataFrame(misses, columns=[*self.columns[:-1], 'gt'])
@@ -59,7 +63,8 @@ class SemTabEvaluator:
 
     def result(self, score: float) -> EvalResult:
         self.append_misses()
-        return EvalResult.from_score(score, len(self.annotated), len(self.gt_ans))
+        gt_len = len([row[0] for row in self.gt.iter_rows() if row[0] in self.scope])
+        return EvalResult.from_score(score, len(self.annotated), gt_len)
 
 
 class CEA_Evaluator(SemTabEvaluator):
