@@ -13,16 +13,11 @@ def _get_config() -> Config:
     while True:
         try:
             import tomllib
+
             with open("config.toml", "rb") as f:
                 return Config(tomllib.load(f))
-        except:
-            ...
-        try:
-            import toml
-            return Config(toml.load("config.toml"))
-        except:
-            ...
-        raise Exception("No toml support!")
+        except Exception as e:
+            raise Exception("No toml support!") from e
 
 
 config = _get_config()

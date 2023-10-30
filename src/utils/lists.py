@@ -1,9 +1,15 @@
-from typing import Any, Iterable, TypeAlias, TypeGuard, TypeVar, overload
+from typing import Any, Iterable, Type, TypeAlias, TypeGuard, TypeVar, overload
 
-T = TypeVar('T', int, float, bool, str)
-NestedList: TypeAlias = list['NestedList[T]' | T]
+T = TypeVar("T", int, float, bool, str)
+U = TypeVar("U")
+NestedList: TypeAlias = list["NestedList[T]" | T]
 BasicType: TypeAlias = int | float | bool | str
 MaybeNested: TypeAlias = T | NestedList[T]
+
+
+def is_list_of(li: list[Any], tp: Type[U]) -> TypeGuard[list[U]]:
+    assert li
+    return isinstance(li[0], tp)
 
 
 @overload
@@ -50,53 +56,6 @@ def unique_by(a: Iterable[dict[str, A]], *, key: str) -> list[dict[str, A]]:
     return list({x[key]: x for x in a}.values())
 
 
-@overload
-def flatten(a: list[list[T]]) -> list[T]:
-    ...
-
-
-@overload
-def flatten(a: list[list[list[T]]]) -> list[T]:
-    ...
-
-
-@overload
-def flatten(a: list[list[list[list[T]]]]) -> list[T]:
-    ...
-
-
-List234d: TypeAlias = list[list[T]] | list[list[list[T]]] | list[list[list[list[T]]]]
-
-
-def _is_list1d(a: Any) -> TypeGuard[list[T]]:
-    return len(a) == 0 or not isinstance(a[0], list)
-
-
-def _is_list2d(a: List234d) -> TypeGuard[list[list[T]]]:
-    return len(a[0]) == 0 or not isinstance(a[0][0], list)
-
-
-def _is_list3d(a: List234d) -> TypeGuard[list[list[list[T]]]]:
-    return len(a[0][0]) == 0 or not isinstance(a[0][0][0], list)
-
-
-def _is_list4d(a: List234d) -> TypeGuard[list[list[list[T]]]]:
-    return len(a[0][0][0]) == 0 or not isinstance(a[0][0][0][0], list)
-
-
-def flatten(a: list[list[T]] | list[list[list[T]]] | list[list[list[list[T]]]]) -> list[T]:
-    # [[]], [[[]]], [[[[]]]]
-    if _is_list1d(a):
-        return a
-    if _is_list2d(a):
-        return sum(a, [])
-    elif _is_list3d(a):
-        return sum(sum(a, []), [])
-    elif _is_list4d(a):
-        return sum(sum(sum(a, []), []), [])
-    return []
-
-
 def transpose_dictlist(obj: dict[str, list[A]]) -> list[dict[str, A]]:
     keys = obj.keys()
     return [dict(zip(keys, x)) for x in zip(*obj.values())]
@@ -115,7 +74,6 @@ def transpose_dictlist_4d(obj: dict[str, list[list[list[list[A]]]]]) -> list[lis
 
 
 if __name__ == "__main__":
-
     # original = ["5", '1', ["66", ["8", "5", "9"], '2', "77", [['1', '2']]]]
     original: NestedList[int] = [[[1, 2, 3], [4, 5, 6], [7, 2, 3]]]
     # original = [5, 6]

@@ -5,17 +5,17 @@ def _init_logger():
     logger = colorlog.getLogger("searchmanage")
 
     log_colors_config = {
-        'DEBUG': 'white',  # cyan white
-        'INFO': 'white',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'CRITICAL': 'bold_red',
+        "DEBUG": "white",  # cyan white
+        "INFO": "white",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red",
     }
 
     # 输出到控制台
     console_handler = colorlog.StreamHandler()
     # 输出到文件
-    file_handler = logging.FileHandler(filename="searchmanage.log", mode='a', encoding='utf8')
+    file_handler = logging.FileHandler(filename="searchmanage.log", mode="a", encoding="utf8")
 
     # 日志级别，logger 和 handler以最高级别为准，不同handler之间可以不一样，不相互影响
     logger.setLevel(logging.DEBUG)
@@ -25,10 +25,10 @@ def _init_logger():
     # 日志输出格式
     console_handler.setFormatter(
         colorlog.ColoredFormatter(
-            '%(log_color)s[%(asctime)s] [%(levelname)s] %(message)s', log_colors=log_colors_config
+            "%(log_color)s[%(asctime)s] [%(levelname)s] %(message)s", log_colors=log_colors_config
         )
     )
-    file_handler.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s'))
+    file_handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s"))
 
     # 重复日志问题：
     # 1、防止多次addHandler；

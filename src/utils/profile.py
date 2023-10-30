@@ -10,6 +10,7 @@ class Profile:
         self.profile_path.mkdir(parents=True, exist_ok=True)
         self.snakeviz = snakeviz
         import cProfile
+
         self.pr = cProfile.Profile()
 
     def __enter__(self):

@@ -1,10 +1,12 @@
-from operator import itemgetter
 import re
+from collections import Counter
 from dataclasses import dataclass
+from operator import itemgetter
 from typing import Iterable, TypeAlias
 
-from rapidfuzz import fuzz, process, utils
 from dataclasses_json import DataClassJsonMixin
+from more_itertools import flatten
+from rapidfuzz import fuzz
 
 from ...process import EntityManager
 from ...table import Cell, Table, WDValueType
@@ -13,10 +15,20 @@ from ..utils import make_list2, make_list3
 opt_str: TypeAlias = str | None
 
 months = [
-    "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
-    "december"
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
 ]
-months_abbr = [s[: 3] for s in months]
+months_abbr = [s[:3] for s in months]
 
 float_pat = re.compile(r"[^0-9.%-]")
 
@@ -57,7 +69,7 @@ class SimilarityMeta(DataClassJsonMixin):
             pids=[None] * cols,
             qids=[None] * cols,
             labels=[None] * cols,
-            matches=[[] for _ in range(cols)]
+            matches=[[] for _ in range(cols)],
         )
 
 
@@ -73,18 +85,21 @@ def quick_similarity(table: Table):
     result = []
     for cell in table.sub_col:
         metas: list[SimilarityMeta] = [c.metadata for c in cell]  # type: ignore
-        result.append({
-            "avg": [m.avg for m in metas],
-            "bests": [m.bests for m in metas],
-            "pids": [m.pids for m in metas],
-            "qids": [m.qids for m in metas],
-            "labels": [m.labels for m in metas],
-        })
+        result.append(
+            {
+                "avg": [m.avg for m in metas],
+                "bests": [m.bests for m in metas],
+                "pids": [m.pids for m in metas],
+                "qids": [m.qids for m in metas],
+                "labels": [m.labels for m in metas],
+            }
+        )
     return result
 
 
 def cutoff(x: float, a: float):
-    return x if x >= a else 0
+    # return x if x >= a else 0
+    return max((x - a + 1e-6) / (1 - a + 1e-6), 0)
 
 
 def is_all_num(s: str) -> bool:
@@ -98,9 +113,7 @@ class Matcher:
 
     @classmethod
     def num_similarity(cls, a: float, b: float) -> float:
-        d = abs(a - b)
-        if a * b != 0:
-            d /= max(abs(a), abs(b))
+        d = abs(a - b) / max(abs(a) + 1e-9, abs(b) + 1e-9)
         return cutoff(1 - d, Matcher.beta)
 
     @classmethod
@@ -126,8 +139,9 @@ class Matcher:
         return cls.match_some(((s, fuzz.ratio(tab, s.lower()) / 100) for s in src), cls.alpha)
 
     @classmethod
-    def wikibase_entity_id(cls, tab: str,
-                           properties: list[WDValueType.WikibaseEntityId]) -> tuple[float, opt_str, opt_str]:
+    def wikibase_entity_id(
+        cls, tab: str, properties: list[WDValueType.WikibaseEntityId]
+    ) -> tuple[float, opt_str, opt_str]:
         max_sim = 0.0
         max_qid = None
         max_label = None
@@ -178,7 +192,7 @@ class Matcher:
     @classmethod
     def time_sim(cls, pt: str, words: list[str], nums: list[int]) -> float:
         l3 = nums[:]
-        _y, _m, _d = list(map(int, time_pat_num0.findall(pt)[: 3]))  # 年月日
+        _y, _m, _d = list(map(int, time_pat_num0.findall(pt)[:3]))  # 年月日
         _mi = int(_m) - 1
         sim = 0
         if _mi >= 0 and (months[_mi] in words or months_abbr[_mi] in words):  # 有月份单词
@@ -245,6 +259,7 @@ class Matcher:
 class ValueMatchWikidata:
     match_cutoff: float = 0.5
     key_threshold: float = 0.8
+    property_select_threshold: float = 0.15
 
     def __init__(self) -> None:
         ...
@@ -279,10 +294,11 @@ class ValueMatchWikidata:
                     result.append((entity.qid, key, label, sim))
         return result
 
-    def get_all_matches_with_entity(self,
-                                    subject: Cell,
-                                    cell: Cell,
-                                    cutoff: float = 0.5) -> list[tuple[str, str, str, str | None, float]]:
+    def get_all_matches_with_entity(
+        self, subject: Cell, cell: Cell, cutoff: float = 0.5
+    ) -> list[tuple[str, str, str, str | None, float]]:
+        from ...table.table_data import excl
+
         result: list[tuple[str, str, str, str | None, float]] = []
         cell_label = cell.value.lower()
         if not cell_label:
@@ -291,7 +307,7 @@ class ValueMatchWikidata:
             entity = cand.entity_p
             assert entity.properties is not None
             for key, value in entity.properties.items():
-                if not value:  # Possibly equals []
+                if not value or key in excl:  # Possibly equals []
                     continue
                 value_type = value[0][0]
                 qid = None
@@ -313,10 +329,9 @@ class ValueMatchWikidata:
                     result.append((entity.qid, key, label, qid, sim))
         return result
 
-    def get_all_matches_no_entity(self,
-                                  subject: Cell,
-                                  cell: Cell,
-                                  cutoff: float = 0.5) -> list[tuple[str, str, str, float]]:
+    def get_all_matches_no_entity(
+        self, subject: Cell, cell: Cell, cutoff: float = 0.5
+    ) -> list[tuple[str, str, str, float]]:
         result: list[tuple[str, str, str, float]] = []
         cell_label = cell.value.lower()
         if not cell_label:
@@ -344,10 +359,9 @@ class ValueMatchWikidata:
                     result.append((entity.qid, key, label, sim))
         return result
 
-    def get_all_matches_entity(self,
-                               subject: Cell,
-                               cell: Cell,
-                               cutoff: float = 0.5) -> list[tuple[str, str, str, str, float]]:
+    def get_all_matches_entity(
+        self, subject: Cell, cell: Cell, cutoff: float = 0.5
+    ) -> list[tuple[str, str, str, str, float]]:
         result: list[tuple[str, str, str, str, float]] = []
         cell_label = cell.value.lower()
         for cand in subject:
@@ -382,7 +396,7 @@ class ValueMatchWikidata:
         return result
 
     def process_pro(self, table: Table, k: int, i: int, j: int, sim_metas: dict[str, SimilarityMeta]) -> None:
-        """_summary_
+        """处理一个单元格
 
         Args:
             table (Table): _description_.
@@ -406,15 +420,12 @@ class ValueMatchWikidata:
                 types.update(e[1] for e in EntityManager.get(q).properties.get("P31", []))  # type: ignore
             sm = sim_metas[q]
             sm.matches[i].append((p, l, e, s))
-            if s > sm.bests[i]:
-                sm.bests[i] = s
-                sm.labels[i] = l
-                sm.pids[i] = p
-                sm.qids[i] = e
 
     def process_rows_sub(self, table: Table, k: int):
-        sim_metas = [{ca.qid: SimilarityMeta.new(table.cols)
-                      for ca in table[k, j].candidates} for j in range(table.rows)]
+        """在以k列为主题列的基础上处理"""
+        sim_metas = [
+            {ca.qid: SimilarityMeta.new(table.cols) for ca in table[k, j].candidates} for j in range(table.rows)
+        ]
         for i in range(table.cols):
             if i == k:
                 continue
@@ -422,8 +433,23 @@ class ValueMatchWikidata:
                 if "../../" in table[i, j].value:
                     continue
                 self.process_pro(table, k, i, j, sim_metas[j])
-        den = max(sum(not col.empty for col in table.columns) - 1, 1)  # 非空列数-1
-        # den = table.cols - 1
+
+        # 下面对每一列需要统计匹配p计数
+        den = 0
+        for i in range(table.cols):
+            cnt = Counter(flatten({p for q, p in self.match_dict[k][i][j].keys()} for j in range(table.rows)))
+            supported = {k for k, v in cnt.items() if v >= table.rows * ValueMatchWikidata.property_select_threshold}
+            if not supported:  # 只保留匹配数量足够多的属性
+                continue
+            den += 1
+            # max_freq = cnt.most_common(1)[0][1]
+            for j in range(table.rows):
+                for sm in sim_metas[j].values():
+                    sm.matches[i] = [t for t in sm.matches[i] if t[0] in supported]
+                    best = max(sm.matches[i], key=lambda t: t[3], default=("", "", None, 0.0))
+                    sm.pids[i], sm.labels[i], sm.qids[i], sm.bests[i] = best
+        den = max(den, 1)
+
         for j in range(table.rows):
             for cand in table[k, j]:
                 sm = sim_metas[j][cand.qid]
@@ -431,17 +457,21 @@ class ValueMatchWikidata:
                 for i in range(table.cols):
                     sm.matches[i].sort(key=itemgetter(-1), reverse=True)
                 cand.metadata = sm
+            # if len(choices := [ca for ca in table[k, j].candidates if ca.metadata.avg > 0]) > 3:
+            #     table[k, j].candidates = choices
 
     def process_rows(self, table: Table, infer_subcol: bool) -> None:
+        """对整表做处理"""
         for col in table.columns:
             col.empty = not any(col.cell_texts)
+        # 对每列做处理，求评分
         for k in range(table.cols):
             if not (table[k].searchable and (k == table.key_col or infer_subcol)):
                 continue
             self.process_rows_sub(table, k)
             table[k].metadata = {
-                "major":
-                (sum(max((ca.metadata.avg for ca in cell), default=0)**2 for cell in table[k]) / table.rows)**0.5
+                "major": (sum(max((ca.metadata.avg for ca in cell), default=0) ** 2 for cell in table[k]) / table.rows)
+                ** 0.5
             }
 
         # 然后是找主题列
@@ -455,7 +485,7 @@ class ValueMatchWikidata:
         major_threshold = min(self.key_threshold, table.sub_col.metadata["major"] - 0.1)
         table.sub_col.keyable = True
         for i, col in enumerate(table):
-            if (col.searchable and i != table.key_col and col.metadata["major"] > major_threshold):
+            if col.searchable and i != table.key_col and col.metadata["major"] > major_threshold:
                 col.keyable = True
 
     def process(self, table: Table, infer_subcol: bool = False) -> bool:
@@ -470,4 +500,8 @@ class ValueMatchWikidata:
     @classmethod
     @property
     def params(cls):
-        return {"match_cutoff": cls.match_cutoff, "key_threshold": cls.key_threshold}
+        return {
+            "match_cutoff": cls.match_cutoff,
+            "key_threshold": cls.key_threshold,
+            "property_select_threshold": cls.property_select_threshold,
+        }

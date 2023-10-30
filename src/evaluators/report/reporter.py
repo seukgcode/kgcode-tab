@@ -4,11 +4,13 @@ from collections import defaultdict
 from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
+from typing import Any
 
 import jinja2
 import pandas as pd
 import plotly as py
 import plotly.express as px
+import polars as pl
 
 from ...utils import PathLike, read_json
 
@@ -19,7 +21,7 @@ def parse_datetime(s: str):
 
 
 def _get_reports(path: Path):
-    reports = []
+    reports: list[Any] = []
     for p in path.iterdir():
         if p.is_dir() and (pp := p / "report.json").is_file():
             try:
@@ -35,12 +37,12 @@ def _get_reports(path: Path):
     return reports
 
 
-def _generate_html(reports: list, by_time: bool):
-    report_data = []
+def _generate_html(reports: list[Any], by_time: bool):
+    report_data: list[Any] = []
     cnt = defaultdict[str, int](int)
     for rep in reports:
         ds_name = rep["dataset"].removesuffix("Dataset")
-        dat = {
+        dat: dict[str, Any] = {
             "index": cnt[ds_name],
             "datetime": datetime.strptime(rep["datetime"], "%Y-%m-%d %H:%M:%S.%f"),
             "dataset": ds_name,
@@ -56,7 +58,7 @@ def _generate_html(reports: list, by_time: bool):
         )
     report_df = pd.DataFrame(report_data)
     charts = []
-    for i, (ds, df) in enumerate(report_df.groupby("dataset"), 1):
+    for _, (ds, df) in enumerate(report_df.groupby("dataset"), 1):
         fig = px.line(
             df,
             x="datetime" if by_time else "index",
@@ -86,3 +88,8 @@ def generate_report(result_path: PathLike, by_time: bool = False, auto_open: boo
     output_path.write_text(html)
     if auto_open:
         os.startfile(output_path)
+
+
+def generate_perf_figure(result_path: PathLike, perf: pl.DataFrame):
+    fig = px.scatter(perf.to_pandas(), x="rows", y="cols", size="duration", color="duration", hover_data=["table"])
+    fig.write_html(Path(result_path) / "perf.html", include_plotlyjs="cdn")

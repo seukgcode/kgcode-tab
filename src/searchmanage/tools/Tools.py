@@ -1,7 +1,4 @@
-import csv
-import numpy as np
-from typing import List, Any, Union, Tuple
-from .. import logger
+from typing import Any, List, Tuple, Union
 
 # Browser proxies list
 AGENTS_ = [
@@ -37,8 +34,10 @@ AGENTS_ = [
     "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:2.0b4pre) Gecko/20100815 Minefield/4.0b4pre",
     "Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0 )",
     "Mozilla/4.0 (compatible; MSIE 5.5; Windows 98; Win 9x 4.90)",
-    "Mozilla/5.0 (Windows; U; Windows XP) Gecko MultiZilla/1.6.1.0a", "Mozilla/2.02E (Win95; U)",
-    "Mozilla/3.01Gold (Win95; I)", "Mozilla/4.8 [en] (Windows NT 5.1; U)",
+    "Mozilla/5.0 (Windows; U; Windows XP) Gecko MultiZilla/1.6.1.0a",
+    "Mozilla/2.02E (Win95; U)",
+    "Mozilla/3.01Gold (Win95; I)",
+    "Mozilla/4.8 [en] (Windows NT 5.1; U)",
     "Mozilla/5.0 (Windows; U; Win98; en-US; rv:1.4) Gecko Netscape/7.1 (ax)",
     "HTC_Dream Mozilla/5.0 (Linux; U; Android 1.5; en-ca; Build/CUPCAKE) AppleWebKit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari/525.20.1",
     "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.0.2; U; de-DE) AppleWebKit/534.6 (KHTML, like Gecko) wOSBrowser/234.40.1 Safari/534.6 TouchPad/1.0",
@@ -71,7 +70,7 @@ AGENTS_ = [
     "Mozilla/5.0 (Linux; U; Android 3.0.1; fr-fr; A500 Build/HRI66) AppleWebKit/534.13 (KHTML, like Gecko) Version/4.0 Safari/534.13",
     "Mozilla/5.0 (Linux; U; Android 3.0; en-us; Xoom Build/HRI39) AppleWebKit/525.10  (KHTML, like Gecko) Version/3.0.4 Mobile Safari/523.12.2",
     "Mozilla/5.0 (Linux; U; Android 1.6; es-es; SonyEricssonX10i Build/R1FA016) AppleWebKit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari/525.20.1",
-    "Mozilla/5.0 (Linux; U; Android 1.6; en-us; SonyEricssonX10i Build/R1AA056) AppleWebKit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari/525.20.1"
+    "Mozilla/5.0 (Linux; U; Android 1.6; en-us; SonyEricssonX10i Build/R1AA056) AppleWebKit/528.5  (KHTML, like Gecko) Version/3.1.2 Mobile Safari/525.20.1",
 ]
 """User-Agents you can choose"""
 
@@ -80,6 +79,7 @@ class Tools:
     """Class of providing some functions you may use.
 
     In this class, you can call its static methods you want."""
+
     @staticmethod
     # hierarchical structure of data
     def hierarchical_structure(temp_other: Any, hie_level: int = 0, max_level: int = None):
@@ -141,24 +141,24 @@ class Tools:
         """
         type_temp = type(temp_other)
         level_num = hie_level
-        print('\t' * level_num, level_num, type_temp)
+        print("\t" * level_num, level_num, type_temp)
         if max_level is not None:
             if hie_level == max_level:
                 return
         if type_temp == dict:
-            print('\t' * level_num, f'Length:{len(temp_other)}')
+            print("\t" * level_num, f"Length:{len(temp_other)}")
             if len(temp_other) == 0:
-                print('\t' * level_num, 'None')
+                print("\t" * level_num, "None")
             else:
                 num = 1
                 for keys, values in temp_other.items():
-                    print('\t' * level_num, f'{level_num}.{num}', keys)
+                    print("\t" * level_num, f"{level_num}.{num}", keys)
                     num += 1
                     Tools.hierarchical_structure(values, hie_level=level_num + 1, max_level=max_level)
         elif type_temp == list:
-            print('\t' * level_num, f'Length:{len(temp_other)}')
+            print("\t" * level_num, f"Length:{len(temp_other)}")
             if len(temp_other) == 0:
-                print('\t' * level_num, 'None')
+                print("\t" * level_num, "None")
             else:
                 Tools.hierarchical_structure(temp_other[0], hie_level=level_num + 1, max_level=max_level)
 
@@ -423,8 +423,8 @@ class Tools:
 
     @staticmethod
     def split_batch(init_list: list, batch_size: int) -> list:
-        groups = zip(*(iter(init_list), ) * batch_size)
+        groups = zip(*(iter(init_list),) * batch_size)
         end_list = [list(i) for i in groups]
         count = len(init_list) % batch_size
-        end_list.append(init_list[-count :]) if count != 0 else end_list
+        end_list.append(init_list[-count:]) if count != 0 else end_list
         return end_list

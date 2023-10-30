@@ -1,6 +1,6 @@
 from typing import Any, Callable, Iterable, Type, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 def make_list1(tp: Type[T], len0: int) -> list[T]:
@@ -18,3 +18,8 @@ def make_list3(tp: Type[T], len0: int, len1: int, len2: int) -> list[list[list[T
 def max_many(l: Iterable[T], key: Callable[[T], Any]) -> list[T]:
     max_value = key(max(l, key=key))
     return [x for x in l if key(x) == max_value]
+
+
+def max_many_eps(l: Iterable[T], key: Callable[[T], Any], eps: float) -> list[T]:
+    max_value = key(max(l, key=key))
+    return [x for x in l if key(x) >= max_value - eps]
